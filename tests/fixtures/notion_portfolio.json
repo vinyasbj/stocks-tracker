@@ -1,0 +1,32 @@
+{"object":"list","has_more":false,"next_cursor":null,"results":[
+ {"object":"page","url":"https://www.notion.so/Reliance-1","in_trash":false,"properties":{
+   "Name":{"type":"title","title":[{"plain_text":"Reliance Industries"}]},
+   "Ticker":{"type":"rich_text","rich_text":[{"plain_text":"reliance"}]},
+   "Exchange":{"type":"select","select":{"name":"NSE"}},
+   "Qty":{"type":"number","number":10},
+   "Avg Price":{"type":"number","number":1200.5}}},
+ {"object":"page","url":"https://www.notion.so/Infosys-2","in_trash":false,"properties":{
+   "Name":{"type":"title","title":[{"plain_text":"Infosys"}]},
+   "Ticker":{"type":"rich_text","rich_text":[{"plain_text":"INFY"}]},
+   "Exchange":{"type":"select","select":null},
+   "Qty":{"type":"formula","formula":{"type":"number","number":5}},
+   "Avg Price":{"type":"rich_text","rich_text":[{"plain_text":"₹1,450"}]}}},
+ {"object":"page","url":"https://www.notion.so/Apple-3","in_trash":false,"properties":{
+   "Name":{"type":"title","title":[{"plain_text":"Apple"}]},
+   "Ticker":{"type":"rich_text","rich_text":[{"plain_text":"AAPL"}]},
+   "Exchange":{"type":"select","select":{"name":"NASDAQ"}},
+   "Qty":{"type":"number","number":2.5},
+   "Avg Price":{"type":"number","number":200}}},
+ {"object":"page","url":"https://www.notion.so/Empty-4","in_trash":false,"properties":{
+   "Name":{"type":"title","title":[]},
+   "Ticker":{"type":"rich_text","rich_text":[]},
+   "Exchange":{"type":"select","select":null},
+   "Qty":{"type":"number","number":null},
+   "Avg Price":{"type":"number","number":null}}},
+ {"object":"page","url":"https://www.notion.so/Old-5","in_trash":true,"properties":{
+   "Name":{"type":"title","title":[{"plain_text":"Deleted Co"}]},
+   "Ticker":{"type":"rich_text","rich_text":[{"plain_text":"XYZ"}]},
+   "Exchange":{"type":"select","select":null},
+   "Qty":{"type":"number","number":1},
+   "Avg Price":{"type":"number","number":1}}}
+]}

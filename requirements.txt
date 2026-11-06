@@ -1,0 +1,11 @@
+python-telegram-bot[job-queue]==21.11.1
+yfinance==1.8.0
+feedparser==6.0.14
+httpx==0.28.1
+# SEBI's server sends an incomplete certificate chain; the macOS/Windows trust store completes it.
+truststore==0.10.5
+ollama==0.6.3
+pydantic==2.14.2
+rapidfuzz==3.14.6
+python-dotenv==1.2.4
+pytest==9.2.0
