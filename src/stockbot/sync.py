@@ -77,7 +77,10 @@ def build_holdings(resolver: Resolver, rows: list[notion.NotionRow], lookup: Loo
         if sec is None:
             report.unmatched.append((row, why))
         else:
-            qty = row.qty if row.list_type == "portfolio" else None
-            avg = row.avg_price if row.list_type == "portfolio" else None
-            report.holdings.append(Holding(sec, row.list_type, qty, avg))
+            if row.list_type == "portfolio":
+                pages = (row.page_id,) if row.page_id else ()
+                report.holdings.append(Holding(sec, "portfolio", row.qty, row.avg_price, pages, row.conviction))
+            else:
+                # Theses are read from portfolio rows only, so wishlist rows carry no page.
+                report.holdings.append(Holding(sec, "wishlist"))
     return report

@@ -84,6 +84,10 @@ class Monitor:
         new = new_items(self.store, stock_scope(sec), items)
         if not new:
             return 0
+        if not self.settings.news_alerts:
+            new = [i for i in new if i.kind != "news"]  # news is still marked seen, so it never replays
+            if not new:
+                return 0
         new = new[:MAX_NEW_PER_STOCK]
         impacts = await report.classify(self.llm, sec, new)
         # Filings always go out; news only when the model does not rate it low.

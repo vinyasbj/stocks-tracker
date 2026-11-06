@@ -50,3 +50,36 @@ def test_plain_text_and_clip():
     long = "\n".join(["<b>line</b>"] * 1000)
     out = clip(long, 100)
     assert len(out) <= 102 and out.endswith("…") and out.count("<b>") == out.count("</b>")
+
+
+def test_news_alerts_can_be_switched_off(monkeypatch):
+    import asyncio
+
+    from stockbot.alerts import monitor as mon
+    from stockbot.models import Holding, Item, Security
+    from stockbot.store import Store
+
+    from .conftest import make_settings
+
+    sec = Security("TCS", "IN", "Tata Consultancy Services Limited")
+    batches = [
+        [Item("old", "news", "old story", "", "Google News")],
+        [Item("old", "news", "old story", "", "Google News"), Item("n1", "news", "TCS wins deal", "", "Google News"),
+         Item("f1", "filing", "Outcome of board meeting", "", "NSE")],
+    ]
+    monkeypatch.setattr(mon.report, "updates", lambda s, settings: batches.pop(0))
+
+    async def classify(llm, s, items):
+        return {}
+
+    monkeypatch.setattr(mon.report, "classify", classify)
+    sent = []
+
+    async def send(chat, msg):
+        sent.append(msg)
+
+    m = mon.Monitor(make_settings(news_alerts=False), Store(":memory:"), None)
+    h = Holding(sec, "portfolio")
+    asyncio.run(m._stock(h, [1], send))  # first pass: baseline only
+    asyncio.run(m._stock(h, [1], send))
+    assert len(sent) == 1 and "Outcome of board meeting" in sent[0] and "TCS wins deal" not in sent[0]

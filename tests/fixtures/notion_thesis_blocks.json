@@ -1,0 +1,241 @@
+{
+ "results": [
+  {
+   "object": "block",
+   "id": "b1",
+   "type": "paragraph",
+   "has_children": false,
+   "paragraph": {
+    "rich_text": [
+     {
+      "plain_text": "GOOGL — Alphabet   Conviction: HIGH   Started: 2026-11-06"
+     }
+    ]
+   }
+  },
+  {
+   "object": "block",
+   "id": "b2",
+   "type": "heading_2",
+   "has_children": false,
+   "heading_2": {
+    "rich_text": [
+     {
+      "plain_text": "One-line thesis"
+     }
+    ]
+   }
+  },
+  {
+   "object": "block",
+   "id": "b3",
+   "type": "paragraph",
+   "has_children": false,
+   "paragraph": {
+    "rich_text": [
+     {
+      "plain_text": "Search is still a cash machine, and Cloud plus AI are becoming a second engine."
+     }
+    ]
+   }
+  },
+  {
+   "object": "block",
+   "id": "b4",
+   "type": "paragraph",
+   "has_children": false,
+   "paragraph": {
+    "rich_text": [
+     {
+      "plain_text": "WHY I OWN IT (pillars, each with something measurable)"
+     }
+    ]
+   }
+  },
+  {
+   "object": "block",
+   "id": "b5",
+   "type": "numbered_list_item",
+   "has_children": false,
+   "numbered_list_item": {
+    "rich_text": [
+     {
+      "plain_text": "Search keeps growing despite AI chatbots → track: Search revenue YoY > 8%"
+     }
+    ]
+   }
+  },
+  {
+   "object": "block",
+   "id": "b6",
+   "type": "numbered_list_item",
+   "has_children": false,
+   "numbered_list_item": {
+    "rich_text": [
+     {
+      "plain_text": "Not expensive → track: P/E < 35"
+     }
+    ]
+   }
+  },
+  {
+   "object": "block",
+   "id": "b7",
+   "type": "heading_2",
+   "has_children": true,
+   "heading_2": {
+    "rich_text": [
+     {
+      "plain_text": "Thesis breakers (sell or re-think if)"
+     }
+    ]
+   }
+  },
+  {
+   "object": "block",
+   "id": "b8",
+   "type": "bulleted_list_item",
+   "has_children": true,
+   "bulleted_list_item": {
+    "rich_text": [
+     {
+      "plain_text": "Search revenue falls 2 quarters in a row"
+     }
+    ]
+   }
+  },
+  {
+   "object": "block",
+   "id": "b9",
+   "type": "bulleted_list_item",
+   "has_children": false,
+   "bulleted_list_item": {
+    "rich_text": [
+     {
+      "plain_text": "nested: watch the Q4 call"
+     }
+    ]
+   }
+  },
+  {
+   "object": "block",
+   "id": "b10",
+   "type": "heading_3",
+   "has_children": false,
+   "heading_3": {
+    "rich_text": [
+     {
+      "plain_text": "My notes"
+     }
+    ]
+   }
+  },
+  {
+   "object": "block",
+   "id": "b11",
+   "type": "paragraph",
+   "has_children": false,
+   "paragraph": {
+    "rich_text": [
+     {
+      "plain_text": "Antitrust case ruling due in 2027"
+     }
+    ]
+   }
+  },
+  {
+   "object": "block",
+   "id": "b12",
+   "type": "paragraph",
+   "has_children": false,
+   "paragraph": {
+    "rich_text": [
+     {
+      "plain_text": ""
+     }
+    ]
+   }
+  },
+  {
+   "object": "block",
+   "id": "b13",
+   "type": "heading_2",
+   "has_children": false,
+   "heading_2": {
+    "rich_text": [
+     {
+      "plain_text": "Action plan"
+     }
+    ]
+   }
+  },
+  {
+   "object": "block",
+   "id": "b14",
+   "type": "paragraph",
+   "has_children": false,
+   "paragraph": {
+    "rich_text": [
+     {
+      "plain_text": "Add below $150 · Trim if it grows past 15% of my portfolio"
+     }
+    ]
+   }
+  },
+  {
+   "object": "block",
+   "id": "b15",
+   "type": "heading_2",
+   "has_children": false,
+   "heading_2": {
+    "rich_text": [
+     {
+      "plain_text": "BLUEPRINT CHECKS"
+     }
+    ]
+   }
+  },
+  {
+   "object": "block",
+   "id": "b16",
+   "type": "to_do",
+   "has_children": false,
+   "to_do": {
+    "rich_text": [
+     {
+      "plain_text": "I understand how the company makes money"
+     }
+    ],
+    "checked": true
+   }
+  },
+  {
+   "object": "block",
+   "id": "b17",
+   "type": "to_do",
+   "has_children": false,
+   "to_do": {
+    "rich_text": [
+     {
+      "plain_text": "It has a durable moat (brand, network, cost or switching costs)"
+     }
+    ],
+    "checked": false
+   }
+  },
+  {
+   "object": "block",
+   "id": "b18",
+   "type": "to_do",
+   "has_children": false,
+   "to_do": {
+    "rich_text": [
+     {
+      "plain_text": "Management is honest and allocates capital well."
+     }
+    ],
+    "checked": true
+   }
+  }
+ ]
+}

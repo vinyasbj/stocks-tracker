@@ -1,0 +1,554 @@
+{
+ "results": [
+  {
+   "object": "page",
+   "in_trash": false,
+   "properties": {
+    "Rule": {
+     "type": "title",
+     "title": [
+      {
+       "plain_text": "I understand how the company makes money"
+      }
+     ]
+    },
+    "Pillar": {
+     "type": "select",
+     "select": {
+      "name": "Business"
+     }
+    },
+    "Metric": {
+     "type": "select",
+     "select": {
+      "name": "Judgment"
+     }
+    },
+    "Condition": {
+     "type": "select",
+     "select": null
+    },
+    "Threshold": {
+     "type": "number",
+     "number": null
+    },
+    "Must pass": {
+     "type": "checkbox",
+     "checkbox": true
+    }
+   }
+  },
+  {
+   "object": "page",
+   "in_trash": false,
+   "properties": {
+    "Rule": {
+     "type": "title",
+     "title": [
+      {
+       "plain_text": "Return on equity at least 15%"
+      }
+     ]
+    },
+    "Pillar": {
+     "type": "select",
+     "select": {
+      "name": "Quality"
+     }
+    },
+    "Metric": {
+     "type": "select",
+     "select": {
+      "name": "ROE"
+     }
+    },
+    "Condition": {
+     "type": "select",
+     "select": {
+      "name": "≥"
+     }
+    },
+    "Threshold": {
+     "type": "number",
+     "number": 15
+    },
+    "Must pass": {
+     "type": "checkbox",
+     "checkbox": true
+    }
+   }
+  },
+  {
+   "object": "page",
+   "in_trash": false,
+   "properties": {
+    "Rule": {
+     "type": "title",
+     "title": [
+      {
+       "plain_text": "Debt/equity at most 1"
+      }
+     ]
+    },
+    "Pillar": {
+     "type": "select",
+     "select": {
+      "name": "Safety"
+     }
+    },
+    "Metric": {
+     "type": "select",
+     "select": {
+      "name": "D/E"
+     }
+    },
+    "Condition": {
+     "type": "select",
+     "select": {
+      "name": "<="
+     }
+    },
+    "Threshold": {
+     "type": "number",
+     "number": 1
+    },
+    "Must pass": {
+     "type": "checkbox",
+     "checkbox": true
+    }
+   }
+  },
+  {
+   "object": "page",
+   "in_trash": false,
+   "properties": {
+    "Rule": {
+     "type": "title",
+     "title": [
+      {
+       "plain_text": "Profit-making: not loss-making in each of the last 2 years"
+      }
+     ]
+    },
+    "Pillar": {
+     "type": "select",
+     "select": {
+      "name": "Quality"
+     }
+    },
+    "Metric": {
+     "type": "select",
+     "select": {
+      "name": "Consecutive loss years"
+     }
+    },
+    "Condition": {
+     "type": "select",
+     "select": {
+      "name": "≤"
+     }
+    },
+    "Threshold": {
+     "type": "number",
+     "number": 1
+    },
+    "Must pass": {
+     "type": "checkbox",
+     "checkbox": true
+    }
+   }
+  },
+  {
+   "object": "page",
+   "in_trash": false,
+   "properties": {
+    "Rule": {
+     "type": "title",
+     "title": [
+      {
+       "plain_text": "Net profit margin at least 8%"
+      }
+     ]
+    },
+    "Pillar": {
+     "type": "select",
+     "select": {
+      "name": "Quality"
+     }
+    },
+    "Metric": {
+     "type": "select",
+     "select": {
+      "name": "Net margin"
+     }
+    },
+    "Condition": {
+     "type": "select",
+     "select": {
+      "name": "at least"
+     }
+    },
+    "Threshold": {
+     "type": "number",
+     "number": 8
+    },
+    "Must pass": {
+     "type": "checkbox",
+     "checkbox": false
+    }
+   }
+  },
+  {
+   "object": "page",
+   "in_trash": false,
+   "properties": {
+    "Rule": {
+     "type": "title",
+     "title": [
+      {
+       "plain_text": "P/E at most 40"
+      }
+     ]
+    },
+    "Pillar": {
+     "type": "select",
+     "select": {
+      "name": "Valuation"
+     }
+    },
+    "Metric": {
+     "type": "select",
+     "select": {
+      "name": "PE ratio"
+     }
+    },
+    "Condition": {
+     "type": "select",
+     "select": {
+      "name": "≤"
+     }
+    },
+    "Threshold": {
+     "type": "number",
+     "number": 40
+    },
+    "Must pass": {
+     "type": "checkbox",
+     "checkbox": false
+    }
+   }
+  },
+  {
+   "object": "page",
+   "in_trash": false,
+   "properties": {
+    "Rule": {
+     "type": "title",
+     "title": [
+      {
+       "plain_text": "Moat"
+      }
+     ]
+    },
+    "Pillar": {
+     "type": "select",
+     "select": {
+      "name": "business"
+     }
+    },
+    "Metric": {
+     "type": "select",
+     "select": null
+    },
+    "Condition": {
+     "type": "select",
+     "select": null
+    },
+    "Threshold": {
+     "type": "number",
+     "number": null
+    },
+    "Must pass": {
+     "type": "checkbox",
+     "checkbox": false
+    }
+   }
+  },
+  {
+   "object": "page",
+   "in_trash": false,
+   "properties": {
+    "Rule": {
+     "type": "title",
+     "title": [
+      {
+       "plain_text": "Scored rules pass bar"
+      }
+     ]
+    },
+    "Pillar": {
+     "type": "select",
+     "select": {
+      "name": "Settings"
+     }
+    },
+    "Metric": {
+     "type": "select",
+     "select": null
+    },
+    "Condition": {
+     "type": "select",
+     "select": null
+    },
+    "Threshold": {
+     "type": "number",
+     "number": 70
+    },
+    "Must pass": {
+     "type": "checkbox",
+     "checkbox": false
+    }
+   }
+  },
+  {
+   "object": "page",
+   "in_trash": false,
+   "properties": {
+    "Rule": {
+     "type": "title",
+     "title": [
+      {
+       "plain_text": "Promoter holding at least 50%"
+      }
+     ]
+    },
+    "Pillar": {
+     "type": "select",
+     "select": {
+      "name": "Quality"
+     }
+    },
+    "Metric": {
+     "type": "select",
+     "select": {
+      "name": "Promoter holding"
+     }
+    },
+    "Condition": {
+     "type": "select",
+     "select": {
+      "name": "≥"
+     }
+    },
+    "Threshold": {
+     "type": "number",
+     "number": 50
+    },
+    "Must pass": {
+     "type": "checkbox",
+     "checkbox": false
+    }
+   }
+  },
+  {
+   "object": "page",
+   "in_trash": false,
+   "properties": {
+    "Rule": {
+     "type": "title",
+     "title": [
+      {
+       "plain_text": "ROE between 15 and 30"
+      }
+     ]
+    },
+    "Pillar": {
+     "type": "select",
+     "select": {
+      "name": "Quality"
+     }
+    },
+    "Metric": {
+     "type": "select",
+     "select": {
+      "name": "ROE"
+     }
+    },
+    "Condition": {
+     "type": "select",
+     "select": {
+      "name": "between"
+     }
+    },
+    "Threshold": {
+     "type": "number",
+     "number": 15
+    },
+    "Must pass": {
+     "type": "checkbox",
+     "checkbox": false
+    }
+   }
+  },
+  {
+   "object": "page",
+   "in_trash": false,
+   "properties": {
+    "Rule": {
+     "type": "title",
+     "title": [
+      {
+       "plain_text": "Revenue CAGR at least 10%"
+      }
+     ]
+    },
+    "Pillar": {
+     "type": "select",
+     "select": {
+      "name": "Growth"
+     }
+    },
+    "Metric": {
+     "type": "select",
+     "select": {
+      "name": "Revenue CAGR 3Y"
+     }
+    },
+    "Condition": {
+     "type": "select",
+     "select": {
+      "name": "≥"
+     }
+    },
+    "Threshold": {
+     "type": "number",
+     "number": null
+    },
+    "Must pass": {
+     "type": "checkbox",
+     "checkbox": false
+    }
+   }
+  },
+  {
+   "object": "page",
+   "in_trash": false,
+   "properties": {
+    "Rule": {
+     "type": "title",
+     "title": [
+      {
+       "plain_text": "Net margin at least 15% (percent column)"
+      }
+     ]
+    },
+    "Pillar": {
+     "type": "select",
+     "select": {
+      "name": "Quality"
+     }
+    },
+    "Metric": {
+     "type": "select",
+     "select": {
+      "name": "Net margin"
+     }
+    },
+    "Condition": {
+     "type": "select",
+     "select": {
+      "name": "≥"
+     }
+    },
+    "Threshold": {
+     "type": "number",
+     "number": 0.15
+    },
+    "Must pass": {
+     "type": "checkbox",
+     "checkbox": false
+    }
+   }
+  },
+  {
+   "object": "page",
+   "in_trash": false,
+   "properties": {
+    "Rule": {
+     "type": "title",
+     "title": [
+      {
+       "plain_text": ""
+      }
+     ]
+    },
+    "Pillar": {
+     "type": "select",
+     "select": {
+      "name": "Quality"
+     }
+    },
+    "Metric": {
+     "type": "select",
+     "select": {
+      "name": "ROE"
+     }
+    },
+    "Condition": {
+     "type": "select",
+     "select": {
+      "name": "≥"
+     }
+    },
+    "Threshold": {
+     "type": "number",
+     "number": 1
+    },
+    "Must pass": {
+     "type": "checkbox",
+     "checkbox": false
+    }
+   }
+  },
+  {
+   "object": "page",
+   "in_trash": true,
+   "properties": {
+    "Rule": {
+     "type": "title",
+     "title": [
+      {
+       "plain_text": "Old rule in the trash"
+      }
+     ]
+    },
+    "Pillar": {
+     "type": "select",
+     "select": {
+      "name": "Quality"
+     }
+    },
+    "Metric": {
+     "type": "select",
+     "select": {
+      "name": "ROE"
+     }
+    },
+    "Condition": {
+     "type": "select",
+     "select": {
+      "name": "≥"
+     }
+    },
+    "Threshold": {
+     "type": "number",
+     "number": 1
+    },
+    "Must pass": {
+     "type": "checkbox",
+     "checkbox": false
+    }
+   }
+  }
+ ]
+}

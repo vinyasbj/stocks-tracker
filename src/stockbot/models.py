@@ -42,6 +42,8 @@ class Holding:
     list_type: str  # "portfolio" | "wishlist"
     qty: float | None = None
     avg_price: float | None = None
+    pages: tuple[str, ...] = ()  # Notion page ids of its portfolio rows; the thesis is written in one of them
+    conviction: str | None = None  # the investor's own level from Notion: "HIGH" | "MEDIUM" | "LOW"
 
     @property
     def icon(self) -> str:

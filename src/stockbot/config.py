@@ -1,3 +1,4 @@
+import logging
 import os
 from datetime import time
 from pathlib import Path
@@ -5,6 +6,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
+from .data.notion import db_id
+
+log = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -21,9 +25,24 @@ class Settings(BaseModel):
     notion_token: str
     notion_portfolio_db: str
     notion_wishlist_db: str
+    notion_blueprint_db: str = ""  # the conviction blueprint's rules
+    news_alerts: bool = True  # push news stories as alerts (filings and regulator releases always go)
     notion_columns: dict[str, str]  # field -> column name overrides
     notion_portfolio_market: str  # "IN" | "US" | "" : used for rows without an Exchange column
     notion_wishlist_market: str
+
+
+def notion_link(name: str) -> str:
+    """A Notion database setting, or "" when it is empty or still a placeholder without a database id."""
+    value = os.getenv(name, "").strip()
+    if not value:
+        return ""
+    try:
+        db_id(value)
+    except ValueError:
+        log.info("%s has no Notion database id (%r); treating it as not set", name, value)
+        return ""
+    return value
 
 
 def load_settings() -> Settings:
@@ -42,8 +61,10 @@ def load_settings() -> Settings:
         digest_time_ist=time(int(hh), int(mm)),
         db_path=db_path if db_path.is_absolute() else ROOT / db_path,
         notion_token=os.getenv("NOTION_TOKEN", ""),
-        notion_portfolio_db=os.getenv("NOTION_PORTFOLIO_DB", ""),
-        notion_wishlist_db=os.getenv("NOTION_WISHLIST_DB", ""),
+        notion_portfolio_db=notion_link("NOTION_PORTFOLIO_DB"),
+        notion_wishlist_db=notion_link("NOTION_WISHLIST_DB"),
+        notion_blueprint_db=notion_link("NOTION_BLUEPRINT_DB"),
+        news_alerts=os.getenv("NEWS_ALERTS", "true").strip().lower() not in ("false", "0", "no", "off"),
         notion_portfolio_market=os.getenv("NOTION_PORTFOLIO_MARKET", "").strip().upper(),
         notion_wishlist_market=os.getenv("NOTION_WISHLIST_MARKET", "").strip().upper(),
         notion_columns={

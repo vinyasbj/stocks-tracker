@@ -8,6 +8,9 @@
     python -m stockbot.cli portfolio   # P&L and wishlist prices
     python -m stockbot.cli digest      # the daily digest
     python -m stockbot.cli monitor     # sync, then one alert pass (alerts print here)
+    python -m stockbot.cli check TCS   # judged by your conviction blueprint (also: why)
+    python -m stockbot.cli report      # every portfolio holding judged by your blueprint
+    python -m stockbot.cli blueprint [lock]
 """
 
 import asyncio
@@ -17,6 +20,7 @@ import re
 import sys
 
 from .alerts import digest
+from .analysis import conviction as cv
 from .analysis import report
 from .config import load_settings
 from .engine import Engine
@@ -68,6 +72,23 @@ async def main(argv: list[str]) -> None:
         for row, why in rep.unmatched:
             print(f"!! {row.list_type:9} {row.label}: {why}")
         print(f"added {[x.symbol for x in rep.added]} removed {[x.symbol for x in rep.removed]}")
+    elif cmd in ("check", "why"):
+        sec = await one(eng, " ".join(args))
+        c = await eng.conviction(sec)
+        if c is None:
+            sys.exit(plain(cv.SETUP))
+        profile = await eng.business_profile(sec, c.research)
+        print(plain(cv.render_check(c, profile, await eng.conviction_summary(c))))
+    elif cmd == "report":
+        if eng.store.locked_blueprint() is None:
+            sys.exit(plain(cv.SETUP))
+        if not any(h.list_type == "portfolio" for h in eng.store.holdings()):
+            sys.exit("Nothing to report: the Notion portfolio is empty (run sync first).")
+        for msg in cv.render_report(await eng.conviction_report()):
+            print(plain(msg))
+    elif cmd == "blueprint":
+        pages = cv.render_lock(await eng.lock_blueprint()) if args[:1] == ["lock"] else cv.render_blueprint(await eng.blueprint_status())
+        print("\n".join(plain(x) for x in pages))
     elif cmd in ("portfolio", "digest"):
         print(plain(await digest.build(eng.store.holdings(), with_news=cmd == "digest") or "No holdings; run sync."))
     elif cmd == "monitor":

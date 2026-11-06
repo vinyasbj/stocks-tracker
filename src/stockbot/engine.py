@@ -1,6 +1,7 @@
 """Everything the bot can do, independent of Telegram (the CLI uses it too)."""
 
 import asyncio
+import hashlib
 import logging
 import re
 
@@ -8,18 +9,41 @@ from html import escape
 from typing import Awaitable, Callable
 
 from .alerts.monitor import Monitor
-from .analysis import report
+from .analysis import blueprint, report, thesis, verdict
+from .analysis.conviction import (
+    BlueprintStatus, Conviction, LockResult, Profile, ReportEntry, ReportResult, summary_data,
+)
 from .config import Settings
 from .data import market, notion, tickers
 from .llm.client import LLM
-from .llm.prompts import QA_SYSTEM, RESULTS_SYSTEM, SUMMARY_SYSTEM, INTENT_SYSTEM, Intent
-from .models import Security
+from .llm.prompts import (
+    CONVICTION_SYSTEM, INTENT_SYSTEM, PROFILE_SYSTEM, QA_SYSTEM, RESULTS_SYSTEM, SUMMARY_SYSTEM, Intent,
+)
+from .models import Holding, Security
 from .store import Store
 from .sync import SyncReport, build_holdings
 
 log = logging.getLogger(__name__)
 UNMATCHED_TTL = 30 * 24 * 3600
+PROFILE_TTL = 30 * 24 * 3600
+REPORT_CONCURRENCY = 4
+EXCERPT = 300
 Send = Callable[[int, str], Awaitable[None]]
+
+
+def excerpt(text: str, limit: int = EXCERPT) -> str:
+    """The start of a long text, cut at a sentence or word."""
+    text = " ".join(text.split())
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    end = cut.rfind(". ")
+    return cut[: end + 1] if end > limit // 2 else cut[: cut.rfind(" ")] + "…"
+
+
+def invents_numbers(text: str, source: str) -> bool:
+    """True when `text` has a number that `source` does not: the model made it up."""
+    return any(n not in source for n in re.findall(r"\d+(?:[.,]\d+)?", text))
 
 
 def plain_text(text: str) -> str:
@@ -144,3 +168,124 @@ class Engine:
         for chat in chats:
             await send(chat, msg)
         return len(chats)
+
+    # --- conviction blueprint ---
+
+    async def blueprint_status(self) -> BlueprintStatus:
+        """The locked blueprint, and what Notion holds now (with the difference), when it can be read."""
+        st = BlueprintStatus(self.store.locked_blueprint())
+        s = self.settings
+        if not s.notion_token or not s.notion_blueprint_db:
+            st.error = "NOTION_BLUEPRINT_DB is not set in .env"
+            return st
+        try:
+            pages = await asyncio.to_thread(notion.query_pages, s.notion_token, s.notion_blueprint_db)
+        except Exception as e:
+            log.warning("blueprint read failed: %s", e)
+            st.error = f"couldn't read the blueprint from Notion: {e}"
+            return st
+        st.parsed = blueprint.parse_rules(pages)
+        if st.locked:
+            st.diff = blueprint.diff(st.locked.blueprint, st.parsed.blueprint)
+        return st
+
+    async def lock_blueprint(self) -> LockResult:
+        """Store what Notion holds as the next version, but only when it is valid and has changed."""
+        st = await self.blueprint_status()
+        res = LockResult(st)
+        if st.error or st.parsed is None or st.parsed.problems or not st.parsed.blueprint.rules:
+            return res
+        if st.locked and st.locked.blueprint.fingerprint() == st.parsed.blueprint.fingerprint():
+            res.unchanged = True
+            return res
+        res.version = self.store.lock_blueprint(st.parsed.blueprint)
+        log.info("blueprint v%d locked (%d rules)", res.version, len(st.parsed.blueprint.rules))
+        return res
+
+    def _thesis(self, holding: Holding | None) -> tuple[thesis.Thesis | None, str | None, str]:
+        """(thesis, note to show, note for unconfirmed judgment rules) from the holding's portfolio pages."""
+        if holding is None or holding.list_type != "portfolio":
+            return None, None, "not in your portfolio"
+        failed = None
+        for page in holding.pages:
+            try:
+                th = thesis.parse(page, notion.page_blocks(self.settings.notion_token, page))
+            except Exception as e:
+                log.warning("thesis page %s for %s: %s", page, holding.sec.symbol, e)
+                failed = f"Your thesis could not be read from Notion: {e}"
+                continue
+            if not th.empty:
+                return th, None, ""
+        if failed:
+            return None, failed, "thesis could not be read"
+        return None, None, "no thesis in Notion"
+
+    async def conviction(self, sec: Security, with_updates: bool = True, check_notion: bool = True) -> Conviction | None:
+        """The stock judged by the locked blueprint; None when nothing is locked yet."""
+        locked = self.store.locked_blueprint()
+        if locked is None:
+            return None
+        holding = self.store.holding(sec)
+        held = holding is not None and holding.list_type == "portfolio"
+        r = await self.research(sec, with_updates)
+        th, note, check_note = await asyncio.to_thread(self._thesis, holding)
+        checks = verdict.evaluate(locked.blueprint.rules, r.metrics, r.fundamentals, th, check_note or "no thesis in Notion")
+        v = verdict.decide(checks, held, locked.blueprint.pass_bar)
+        level = (holding.conviction if holding else None) or (th.conviction if th else None)
+        c = Conviction(sec, r, holding, locked, v, th, note, level, verdict.mismatch(level, v))
+        if check_notion:
+            c.unlocked = (await self.blueprint_status()).diff
+        return c
+
+    async def conviction_report(self) -> ReportResult:
+        """Every portfolio holding judged by the locked blueprint. One stock failing doesn't stop the rest."""
+        locked = self.store.locked_blueprint()
+        rep = ReportResult(locked)
+        if locked is None:
+            return rep
+        gate = asyncio.Semaphore(REPORT_CONCURRENCY)
+
+        async def one(h: Holding) -> ReportEntry:
+            async with gate:
+                try:
+                    return ReportEntry(h, await self.conviction(h.sec, with_updates=False, check_notion=False))
+                except Exception as e:
+                    log.warning("report: %s failed: %s", h.sec.symbol, e)
+                    return ReportEntry(h, error=str(e) or type(e).__name__)
+
+        holdings = [h for h in self.store.holdings() if h.list_type == "portfolio"]
+        rep.entries = list(await asyncio.gather(*(one(h) for h in holdings)))
+        rep.unlocked = (await self.blueprint_status()).diff
+        return rep
+
+    async def business_profile(self, sec: Security, r: report.Research) -> Profile:
+        """How and where the company makes money, in at most 3 lines from Yahoo's description (no numbers)."""
+        desc = (r.fundamentals.get("business_summary") or "").strip()
+        if not desc:
+            return Profile(None, "none")
+        key = f"profile:{sec.market}:{sec.symbol}:{hashlib.sha1(desc.encode()).hexdigest()[:12]}"
+        if (hit := self.store.cache_get(key)) is not None:
+            return Profile(hit["text"], hit["source"])
+        try:
+            text = plain_text(await self.llm.chat(
+                [{"role": "system", "content": PROFILE_SYSTEM}, {"role": "user", "content": f"DESCRIPTION:\n{desc}"}]
+            ))
+        except Exception as e:
+            log.warning("profile LLM failed: %s", e)
+            return Profile(excerpt(desc), "description")  # not cached: try the model again next time
+        lines = [ln.strip(" -•") for ln in text.splitlines() if ln.strip()][:3]
+        text = "\n".join(lines)
+        profile = Profile(excerpt(desc), "description") if not text or invents_numbers(text, desc) else Profile(text, "model")
+        self.store.cache_set(key, {"text": profile.text, "source": profile.source}, PROFILE_TTL)
+        return profile
+
+    async def conviction_summary(self, c: Conviction) -> str:
+        data = f"{report.data_block(c.research)}\n{summary_data(c)}"
+        try:
+            return plain_text(await self.llm.chat(
+                [{"role": "system", "content": CONVICTION_SYSTEM},
+                 {"role": "user", "content": f"DATA:\n{data}\n\nExplain the verdict."}]
+            ))
+        except Exception as e:
+            log.warning("LLM failed: %s", e)
+            return f"(The local model is unavailable: {e}. Is `ollama serve` running?)"

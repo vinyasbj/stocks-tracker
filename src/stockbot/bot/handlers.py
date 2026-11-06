@@ -16,6 +16,7 @@ from telegram.ext import (
 )
 
 from ..alerts import digest
+from ..analysis import conviction as cv
 from ..analysis import report
 from ..engine import Engine
 from ..models import Security
@@ -27,6 +28,9 @@ HELP = (
     "/analyze <code>TICKER</code> — strengths, weaknesses, latest quarter\n"
     "/results <code>TICKER</code> — latest quarterly results explained\n"
     "/news <code>TICKER</code> — latest filings and news with impact tags\n"
+    "/check <code>TICKER</code> (or /why) — the stock judged by your conviction blueprint\n"
+    "/report — every holding judged by your blueprint\n"
+    "/blueprint — your locked blueprint; <code>/blueprint lock</code> adopts your Notion edits\n"
     "/portfolio — your Notion portfolio (with P&L) and wishlist\n"
     "/sync — re-read the Notion portfolio and wishlist now\n"
     "/checknow — check your portfolio and wishlist for updates now\n"
@@ -44,7 +48,7 @@ NO_HOLDINGS = (
 )
 
 # Callback data is "<action>|<symbol>|<market>"; Telegram caps it at 64 bytes.
-ACTIONS = {"an": "analyze", "rs": "results", "nw": "news", "qa": "answer"}
+ACTIONS = {"an": "analyze", "rs": "results", "nw": "news", "qa": "answer", "ck": "check"}
 
 
 def engine(ctx: ContextTypes.DEFAULT_TYPE) -> Engine:
@@ -141,7 +145,24 @@ async def do_answer(update, ctx, sec: Security, question: str | None = None):
     ctx.chat_data["last_sec"] = sec
 
 
-DISPATCH = {"an": do_analyze, "rs": do_results, "nw": do_news, "qa": do_answer}
+async def do_check(update, ctx, sec: Security):
+    """The verdict and rules first; the business profile and the model's summary are edited in after."""
+    eng = engine(ctx)
+    async with typing(update, ctx):
+        c = await eng.conviction(sec)
+        if c is None:
+            await reply(update, cv.SETUP)
+            return
+        msg = await reply(update, cv.render_check(c, None, None))
+        profile = await eng.business_profile(sec, c.research)
+        with contextlib.suppress(Exception):
+            await msg.edit_text(cv.render_check(c, profile, None), parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+        summary = await eng.conviction_summary(c)
+    await msg.edit_text(cv.render_check(c, profile, summary), parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+    ctx.chat_data["last_sec"] = sec
+
+
+DISPATCH = {"an": do_analyze, "rs": do_results, "nw": do_news, "qa": do_answer, "ck": do_check}
 
 
 def command(action: str):
@@ -223,6 +244,31 @@ async def digest_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 @allowed_only
+async def report_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    eng = engine(ctx)
+    async with typing(update, ctx):
+        if eng.store.locked_blueprint() is None:
+            await reply(update, cv.SETUP)
+            return
+        if not any(h.list_type == "portfolio" for h in eng.store.holdings()):
+            await reply(update, "Nothing to report: your Notion portfolio is empty. Add your stocks there, then send /sync.")
+            return
+        rep = await eng.conviction_report()
+    for html in cv.render_report(rep):
+        await update.effective_message.reply_text(html, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+
+
+@allowed_only
+async def blueprint_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    eng = engine(ctx)
+    lock = bool(ctx.args) and ctx.args[0].lower() == "lock"
+    async with typing(update, ctx):
+        pages = cv.render_lock(await eng.lock_blueprint()) if lock else cv.render_blueprint(await eng.blueprint_status())
+    for html in pages:
+        await update.effective_message.reply_text(html, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+
+
+@allowed_only
 async def on_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -243,14 +289,20 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if intent.company:
         query = f"{'NSE' if intent.market == 'IN' else 'US'}:{intent.company}" if intent.market else intent.company
         ctx.chat_data["pending_question"] = text
-        sec = await pick(update, ctx, query, "an" if intent.intent == "analyze" and "?" not in text else "qa")
+        if intent.intent == "check":
+            action = "ck"
+        else:
+            action = "an" if intent.intent == "analyze" and "?" not in text else "qa"
+        sec = await pick(update, ctx, query, action)
         if sec is None:
             return  # buttons shown; the question is answered after the pick
         ctx.chat_data.pop("pending_question", None)
     if sec is None:
         await reply(update, "Which stock do you mean? e.g. <i>how were Infosys results?</i> or <code>/analyze TCS</code>")
         return
-    if intent.intent == "analyze" and "?" not in text:
+    if intent.intent == "check":
+        await do_check(update, ctx, sec)
+    elif intent.intent == "analyze" and "?" not in text:
         await do_analyze(update, ctx, sec)
     else:
         await do_answer(update, ctx, sec, text)
@@ -297,6 +349,9 @@ def register(app: Application) -> None:
     app.add_handler(CommandHandler("analyze", command("an")))
     app.add_handler(CommandHandler("results", command("rs")))
     app.add_handler(CommandHandler("news", command("nw")))
+    app.add_handler(CommandHandler(["check", "why"], command("ck")))
+    app.add_handler(CommandHandler("report", report_cmd))
+    app.add_handler(CommandHandler("blueprint", blueprint_cmd))
     app.add_handler(CommandHandler("portfolio", portfolio))
     app.add_handler(CommandHandler("sync", sync_cmd))
     app.add_handler(CommandHandler("checknow", checknow))

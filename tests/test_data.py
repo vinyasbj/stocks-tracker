@@ -71,3 +71,30 @@ def test_google_news_strips_source_and_drops_quote_pages():
     items = news.parse_google_news((FIX / "google_news.xml").read_bytes(), 10)
     assert [i.title for i in items] == ["TCS Q2 revenue climbs 2.8% as AI business tops $3B"]
     assert items[0].source == "Staffing Industry Analysts"
+
+
+def test_fundamentals_keep_description_and_country_as_text(monkeypatch):
+    import pandas as pd
+
+    from stockbot.data import market
+    from stockbot.models import Security
+    from stockbot.store import Store
+
+    class FakeTicker:
+        info = {
+            "longName": "Alphabet Inc.",
+            "longBusinessSummary": "Alphabet operates through Google Services, Google Cloud, and Other Bets segments.",
+            "country": "United States",
+            "currentPrice": "170.2",
+            "trailingPE": 24.1,
+        }
+        quarterly_income_stmt = income_stmt = balance_sheet = cashflow = pd.DataFrame()
+
+        def __init__(self, symbol):
+            pass
+
+    monkeypatch.setattr(market.yf, "Ticker", FakeTicker)
+    f = market.fetch_fundamentals(Security("GOOGL", "US", "Alphabet Inc."), Store(":memory:"))
+    assert f["business_summary"].startswith("Alphabet operates through Google Services")
+    assert f["country"] == "United States"
+    assert f["price"] == 170.2 and f["pe"] == 24.1  # numbers are still converted

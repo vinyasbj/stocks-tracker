@@ -2,11 +2,13 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-GROUNDING = (
+FACTS_ONLY = (
     "Use ONLY the numbers and facts in DATA. Never invent or estimate figures. "
     "If DATA does not contain the answer, say so plainly. "
-    "Do not tell the user to buy or sell. Plain text only: no markdown, no tables, no headings."
 )
+NO_ADVICE = "Do not tell the user to buy or sell. "
+PLAIN = "Plain text only: no markdown, no tables, no headings."
+GROUNDING = FACTS_ONLY + NO_ADVICE + PLAIN
 
 SUMMARY_SYSTEM = (
     "You are an equity research assistant writing for a retail investor. "
@@ -26,13 +28,33 @@ QA_SYSTEM = (
     "stock in DATA in under 180 words. Quote the relevant numbers and dates from DATA. " + GROUNDING
 )
 
+CONVICTION_SYSTEM = (
+    "You are an equity research assistant for an investor who judges stocks by their own fixed rules, "
+    "the BLUEPRINT. DATA holds the stock's numbers and news, the RULE RESULTS, the VERDICT, and the "
+    "investor's THESIS if they wrote one. The VERDICT was computed from the investor's rules: restate it "
+    "exactly, never change or soften it, and give no other recommendation: never call anything a buying or "
+    "selling opportunity. In 4-6 short sentences explain "
+    "which rules the stock clearly passes, which it fails or could not be checked and why that matters, "
+    "whether the latest results and news support or challenge the thesis (or the verdict, if there is "
+    "no thesis), and what to watch next. " + FACTS_ONLY + PLAIN
+)
+
+PROFILE_SYSTEM = (
+    "You summarise a company DESCRIPTION for an investor. In at most 3 short lines say how the company "
+    "makes its money (business lines or segments, and what it sells) and where (main customers and the "
+    "regions it serves). Use ONLY the DESCRIPTION. Write no numbers, percentages, years or amounts. "
+    "If the description does not say something, leave it out. " + PLAIN
+)
+
 INTENT_SYSTEM = (
     "You read a message sent to a stock research bot and extract:\n"
     "- company: the company name or ticker the user asks about, exactly as they wrote it "
     "(e.g. 'hdfc bank', 'AAPL', 'tata motors'); null if they name none.\n"
     "- intent: 'results' for quarterly/annual results or earnings, 'news' for latest news, updates, "
     "filings or regulator actions, 'analyze' for strengths, weaknesses, fundamentals or whether it is a "
-    "good company, 'other' for anything else about the stock.\n"
+    "good company, 'check' when they ask whether to buy, sell, hold or add the stock, whether it fits "
+    "their rules, criteria, blueprint or conviction, or why they own it, 'other' for anything else about "
+    "the stock.\n"
     "- market: 'IN' if the user says NSE, BSE or India; 'US' if they say NYSE, NASDAQ or US; else null."
 )
 
@@ -57,7 +79,7 @@ REGULATOR_SYSTEM = (
 
 class Intent(BaseModel):
     company: str | None
-    intent: Literal["analyze", "results", "news", "other"]
+    intent: Literal["analyze", "results", "news", "check", "other"]
     market: Literal["IN", "US"] | None = None
 
 

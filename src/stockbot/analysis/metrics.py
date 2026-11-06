@@ -31,6 +31,19 @@ def cagr(new: float | None, old: float | None, years: int) -> float | None:
     return ((new / old) ** (1 / years) - 1) * 100
 
 
+def loss_streak(annual: list[dict]) -> int | None:
+    """Fiscal years in a row, counting back from the latest, that ended in a net loss. None without data."""
+    incomes = [r.get("net_income") for r in annual]
+    if not incomes or incomes[0] is None:
+        return None
+    streak = 0
+    for x in incomes:
+        if x is None or x >= 0:
+            break
+        streak += 1
+    return streak
+
+
 STALE_AFTER_DAYS = 200  # a quarter plus the filing deadline plus slack
 
 
@@ -70,6 +83,12 @@ def compute(f: dict, today: date | None = None) -> dict:
         years = min(3, len(revs) - 1)
         m["rev_cagr"] = cagr(revs[0]["revenue"], revs[years]["revenue"], years)
         m["rev_cagr_years"] = years
+    profits = [r for r in a if r.get("net_income")]
+    if len(profits) >= 2:
+        years = min(3, len(profits) - 1)
+        m["ni_cagr"] = cagr(profits[0]["net_income"], profits[years]["net_income"], years)
+        m["ni_cagr_years"] = years
+    m["loss_years"] = loss_streak(a)
     if a:
         latest_a = a[0]
         m["fy"] = latest_a["period"]
@@ -86,6 +105,7 @@ def compute(f: dict, today: date | None = None) -> dict:
     m["roe"] = f["roe"] * 100 if f.get("roe") is not None else None
     m["net_margin"] = f["net_margin"] * 100 if f.get("net_margin") is not None else m.get("fy_net_margin")
     m["pe"] = f.get("pe")
+    m["op_margin"] = f["operating_margin"] * 100 if f.get("operating_margin") is not None else m.get("q_op_margin")
     m["current_ratio"] = f.get("current_ratio")
     price, hi, lo = f.get("price"), f.get("high_52w"), f.get("low_52w")
     if price and hi:

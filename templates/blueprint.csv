@@ -1,0 +1,17 @@
+Rule,Pillar,Metric,Condition,Threshold,Must pass
+I understand how the company makes money,Business,Judgment,,,Yes
+"It has a durable moat (brand, network, cost or switching costs)",Business,Judgment,,,Yes
+Management is honest and allocates capital well,Business,Judgment,,,Yes
+No promoter pledging or governance red flags,Business,Judgment,,,Yes
+Profit-making: not loss-making in each of the last 2 years,Quality,Consecutive loss years,≤,1,Yes
+Return on equity at least 15%,Quality,ROE,≥,15,Yes
+Net profit margin at least 8%,Quality,Net margin,≥,8,No
+Positive free cash flow in at least 3 years,Quality,FCF positive years,≥,3,No
+Revenue grew at least 10% a year over 3 years,Growth,Revenue CAGR 3Y,≥,10,No
+Profit grew at least 10% a year over 3 years,Growth,Profit CAGR 3Y,≥,10,No
+Latest quarter revenue up year on year,Growth,Revenue growth YoY,≥,0,No
+Latest quarter profit up year on year,Growth,Profit growth YoY,≥,0,No
+Debt/equity at most 1,Safety,Debt/Equity,≤,1,Yes
+Current ratio at least 1.2,Safety,Current ratio,≥,1.2,No
+P/E at most 40,Valuation,P/E,≤,40,No
+Scored rules pass bar,Settings,,,75,No

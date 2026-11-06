@@ -50,6 +50,24 @@ def test_growth_matches_year_ago_quarter_by_date():
     assert round(m["from_52w_high"]) == -40
 
 
+def test_profit_cagr_and_operating_margin():
+    m = metrics.compute(FUND, TODAY)
+    assert round(m["ni_cagr"], 1) == 14.5  # 60 -> 90 over 3 years
+    assert m["ni_cagr_years"] == 3
+    assert m["op_margin"] == 25.0  # no TTM figure: the latest quarter's (30 / 120)
+    assert metrics.compute({**FUND, "operating_margin": 0.31}, TODAY)["op_margin"] == 31.0
+
+
+def test_loss_streak():
+    def years(*incomes):
+        return {**FUND, "annual": [{"period": f"{2026 - i}-06-30", "revenue": 100, "net_income": x} for i, x in enumerate(incomes)]}
+
+    assert metrics.compute(years(-5, -3, 10), TODAY)["loss_years"] == 2
+    assert metrics.compute(years(-5, 3, -10), TODAY)["loss_years"] == 1
+    assert metrics.compute(years(5, -3, -10), TODAY)["loss_years"] == 0
+    assert metrics.compute({**FUND, "annual": []}, TODAY)["loss_years"] is None
+
+
 def test_yahoo_growth_fills_a_missing_year_ago_quarter():
     f = {**FUND, "quarterly": FUND["quarterly"][:3], "revenue_growth_yoy": 0.298, "earnings_growth_yoy": 0.407}
     m = metrics.compute(f, TODAY)
@@ -104,3 +122,16 @@ def test_money_formats():
     assert fmt.money(None, "USD") == "n/a"
     assert fmt.indian_group(1234567) == "12,34,567"
     assert fmt.pct(-1.234) == "-1.2%"
+
+
+def test_only_the_conviction_prompt_may_speak_of_buying_or_selling():
+    from stockbot.llm import prompts
+
+    systems = {name: v for name, v in vars(prompts).items() if name.endswith("_SYSTEM")}
+    advice_free = {"SUMMARY_SYSTEM", "RESULTS_SYSTEM", "QA_SYSTEM"}
+    for name in advice_free:
+        assert prompts.NO_ADVICE in systems[name], name
+    assert prompts.NO_ADVICE not in systems["CONVICTION_SYSTEM"]
+    assert "never change" in systems["CONVICTION_SYSTEM"]
+    assert "no numbers" in systems["PROFILE_SYSTEM"]
+    assert "check" in prompts.Intent.model_fields["intent"].annotation.__args__
