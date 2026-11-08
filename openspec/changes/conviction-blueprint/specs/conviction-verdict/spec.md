@@ -99,11 +99,18 @@ A stock in the Notion portfolio SHALL get the first verdict that applies, in thi
 - **THEN** the verdict is ADD
 
 ### Requirement: `/check` shows the verdict, the rules, the thesis and an explanation
-`/check TICKER` SHALL reply with, in order: the stock header; the verdict and its reason; the business profile; the blueprint version and how many counted rules pass; every rule by pillar with its result, value and must-pass flag; the thesis (conviction, one-line thesis, pillars, breakers, action plan) or a note that there is none; the model's summary; and a disclaimer saying the verdict applies the investor's own rules.
+`/check TICKER` SHALL reply with a structured checklist format comprising:
+1. Stock header with company name, symbol, market, price, day change, P/E, and market cap.
+2. Prominent verdict block with verdict code, icon, rules passed count, clear reason, conviction level and any mismatch warning, and locked blueprint version.
+3. Structured Blueprint Checks section (`── 📏 BLUEPRINT CHECKS (vX) ──`) grouped by pillar (Business, Quality, Growth, Safety, Valuation), showing each rule without redundant sentence repetition in a concise checklist format (`[icon] [rule/condition]: [value/status]` with must-pass indicator).
+4. Business & Profit section (`── 🏢 BUSINESS & PROFIT ──`) showing the business description, latest quarter net profit/loss and YoY/QoQ growth, full-year profit and 3Y CAGR, and net/operating margins.
+5. Your Thesis section (`── 📝 YOUR THESIS ──`) displaying thesis sections if present, or a clear concise placeholder if none.
+6. Local model summary (`── 🧠 SUMMARY ──`) explaining the findings.
+7. Disclaimer stating verdicts apply the investor's own blueprint.
 
 #### Scenario: Check a holding with a thesis
 - **WHEN** the investor sends `/check GOOGL` for a holding with a thesis
-- **THEN** the reply has a held-stock verdict, the rule list, the thesis sections, and a summary
+- **THEN** the reply has a held-stock verdict, the structured blueprint checklist, the business and profit breakdown, the thesis sections, and a summary
 
 #### Scenario: Ambiguous ticker
 - **WHEN** the query matches more than one listed stock

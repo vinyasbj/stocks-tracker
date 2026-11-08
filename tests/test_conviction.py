@@ -268,12 +268,12 @@ def test_check_message(eng):
     eng.blocks["pg1"] = thesis_blocks()
     c = run(eng.conviction(GOOGL))
     html = cv.render_check(c, run(eng.business_profile(GOOGL, c.research)), "It fits.")
-    for part in ("🔵 <b>HOLD</b>", "Your conviction: <b>HIGH</b>", "Blueprint v1, locked", "How and where it makes money",
+    for part in ("🔵 <b>VERDICT: HOLD</b>", "Your conviction: <b>HIGH</b>", "v1", "BUSINESS & PROFIT",
                  "Google Cloud", cv.NO_SPLIT, "Latest quarter (Sep 2026): net profit $28.00B · YoY +16.7% · QoQ +7.7%",
                  "Full year to Dec 2025: net profit $110.00B · profit CAGR 22.4% over 3y",
-                 "<b>Quality</b>", "✅ Return on equity at least 15% · <i>must</i> — 31.0%, rule ROE ≥ 15.0%",
-                 "<u>One-line thesis</u>: Search is still a cash machine", "<b>🧠 Summary</b>\nIt fits.",
-                 "your own blueprint v1"):
+                 "<b>Quality</b>", "✅ ROE ≥ 15.0%: 31.0% · <i>must</i>",
+                 "<u>One-line thesis</u>: Search is still a cash machine", "<b>── 🧠 SUMMARY ──</b>\nIt fits.",
+                 "Blueprint v1"):
         assert part in html, part
     assert len(html) <= cv.TELEGRAM_LIMIT
 
@@ -282,7 +282,7 @@ def test_check_message_for_a_loss_maker_not_owned(eng):
     run(eng.lock_blueprint())
     c = run(eng.conviction(JUNK))
     html = cv.render_check(c, cv.Profile(None, "none"), None)
-    assert "🔴 <b>AVOID</b>" in html
+    assert "🔴 <b>VERDICT: AVOID</b>" in html
     assert "<b>Loss-making</b>: net loss $1.00B in the latest quarter" in html
     assert "Full year to Dec 2025: net loss $5.00B" in html
     assert "not in your portfolio" in html

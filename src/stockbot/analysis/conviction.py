@@ -13,7 +13,7 @@ from .thesis import TITLES, Thesis
 from .verdict import HELD_ORDER, Verdict
 
 DISCLAIMER = (
-    "<i>The verdict applies your own blueprint v{version}; it is not the bot's advice. "
+    "<i>Blueprint v{version} · Verdicts apply your own rules; not investment advice. "
     "Data: Yahoo Finance, NSE/SEC filings, Google News.</i>"
 )
 NO_SPLIT = "A split of profit by segment or country is not available from Yahoo."
@@ -160,15 +160,15 @@ def profit_lines(r: Research) -> list[str]:
 
 def profile_block(r: Research, profile: Profile | None) -> str:
     country = r.fundamentals.get("country")
-    title = "<b>🏢 How and where it makes money</b>" + (f" · {escape(country)}" if country else "")
+    loc = f" · {escape(country)}" if country else ""
+    title = f"<b>── 🏢 BUSINESS & PROFIT{loc} ──</b>"
     if profile is None:
-        text = "<i>reading the company description…</i>"
+        text = "• <i>reading the company description…</i>"
     elif profile.text is None:
-        text = "<i>Yahoo has no company description for this stock.</i>"
+        text = "• <i>Yahoo has no company description for this stock.</i>"
     else:
-        label = "summarised from Yahoo's company description" if profile.source == "model" else "Yahoo's company description"
-        text = f"{escape(profile.text)}\n<i>({label})</i>"
-    return "\n".join([title, text, "<b>Profit</b> (whole company)", *profit_lines(r), f"<i>{NO_SPLIT}</i>"])
+        text = f"• {escape(profile.text)}"
+    return "\n".join([title, text, *profit_lines(r), f"<i>{NO_SPLIT}</i>"])
 
 
 def rule_lines(v: Verdict) -> list[str]:
@@ -176,8 +176,14 @@ def rule_lines(v: Verdict) -> list[str]:
     for c in v.checks:
         r = c.rule
         must = " · <i>must</i>" if r.must else ""
-        detail = c.note if r.is_judgment or c.status in ("unknown", "na") else f"{c.note}, rule {r.condition()}"
-        by_pillar.setdefault(r.pillar, []).append(f"{c.icon} {escape(r.text)}{must} — {escape(detail)}")
+        if r.is_judgment:
+            by_pillar.setdefault(r.pillar, []).append(f"  {c.icon} {escape(r.text)} · {escape(c.note)}{must}")
+        elif c.status in ("unknown", "na"):
+            by_pillar.setdefault(r.pillar, []).append(f"  {c.icon} {escape(r.condition())}: {escape(c.note)}{must}")
+        elif c.status == "fail":
+            by_pillar.setdefault(r.pillar, []).append(f"  {c.icon} {escape(r.condition())}: {escape(c.note)} (FAILS){must}")
+        else:
+            by_pillar.setdefault(r.pillar, []).append(f"  {c.icon} {escape(r.condition())}: {escape(c.note)}{must}")
     order = PILLARS + sorted(p for p in by_pillar if p not in PILLARS)
     out = []
     for p in order:
@@ -188,14 +194,13 @@ def rule_lines(v: Verdict) -> list[str]:
 
 
 def thesis_lines(c: Conviction) -> list[str]:
+    title = "<b>── 📝 YOUR THESIS ──</b>"
     if c.thesis is None:
         if c.held:
             why = c.thesis_note or "no thesis in Notion"
-            return ["<b>📝 Your thesis</b>", f"<i>None yet ({escape(why)}). Write it in this stock's portfolio row in "
-                    "Notion using templates/thesis.md.</i>"]
-        return ["<b>📝 Your thesis</b>", "<i>None: this stock is not in your portfolio. Once you buy it, write the "
-                "thesis in its portfolio row in Notion using templates/thesis.md.</i>"]
-    out = ["<b>📝 Your thesis</b>"]
+            return [title, f"<i>None yet ({escape(why)}). Write it in this stock's portfolio row in Notion using templates/thesis.md.</i>"]
+        return [title, "<i>None: this stock is not in your portfolio. Once you buy it, write the thesis in its portfolio row in Notion using templates/thesis.md.</i>"]
+    out = [title]
     for key in ("thesis", "pillars", "breakers", "plan"):
         lines = [x for x in c.thesis.lines(key) if x.strip()][:5]
         if not lines:
@@ -212,21 +217,23 @@ def thesis_lines(c: Conviction) -> list[str]:
 
 def render_check(c: Conviction, profile: Profile | None, summary: str | None) -> str:
     v, locked = c.verdict, c.locked
-    top = [f"{v.icon} <b>{v.code}</b> — {escape(v.reason)}"]
+    top = [
+        f"{v.icon} <b>VERDICT: {v.code}</b> ({v.passed} of {v.counted} rules passed)",
+        f"Reason: {escape(v.reason)}",
+    ]
     if c.conviction:
         top.append(f"Your conviction: <b>{c.conviction}</b>")
     if c.mismatch:
         top.append(f"⚠️ {escape(c.mismatch)}")
-    top.append(f"<i>Blueprint {_version_line(locked)} · {v.passed} of {v.counted} rules pass</i>")
     if notice := unlocked_notice(c.unlocked, locked):
         top.append(notice)
     parts = [
         header(c.research),
         "\n".join(top),
+        "\n".join([f"<b>── 📏 BLUEPRINT CHECKS (v{locked.version}) ──</b>", *rule_lines(v)]),
         profile_block(c.research, profile),
-        "\n".join(["<b>📏 Your blueprint</b>", *rule_lines(v)]),
         "\n".join(thesis_lines(c)),
-        "<b>🧠 Summary</b>\n" + (escape(summary) if summary else "<i>writing summary with the local model…</i>"),
+        "<b>── 🧠 SUMMARY ──</b>\n" + (escape(summary) if summary else "<i>writing summary with the local model…</i>"),
         DISCLAIMER.format(version=locked.version),
     ]
     return clip_check("\n\n".join(parts))

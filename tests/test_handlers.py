@@ -58,7 +58,7 @@ def test_check_sends_then_edits_in_profile_and_summary(eng):  # noqa: F811
     asyncio.run(handlers.command("ck")(update, ctx))
     kinds = [k for k, _, _ in log]
     assert kinds == ["reply", "edit", "edit"]
-    assert "<b>WATCH</b>" in log[0][1] and "reading the company description" in log[0][1]
+    assert "VERDICT: WATCH" in log[0][1] and "reading the company description" in log[0][1]
     assert "Google Services sells ads worldwide." in log[1][1]
     assert "writing summary" not in log[2][1]
     assert ctx.chat_data["last_sec"] == GOOGL

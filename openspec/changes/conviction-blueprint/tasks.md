@@ -39,11 +39,11 @@
 
 ## 6. Telegram and CLI
 
-- [ ] 6.1 Add `/check`, `/why` (action `ck`, through `pick()` and buttons), `/report` and `/blueprint [lock]` handlers, route the `check` intent in `on_text`, and update `COMMANDS` and `HELP`; `/check` sends the code-rendered message first and then edits in the business profile and the summary; verify by running the bot and exercising each command in Telegram, including an ambiguous name such as "infosys"
+- [x] 6.1 Add `/check`, `/why` (action `ck`, through `pick()` and buttons), `/report` and `/blueprint [lock]` handlers, route the `check` intent in `on_text`, and update `COMMANDS` and `HELP`; `/check` sends the code-rendered message first and then edits in the business profile and the summary; verify by running the bot and exercising each command in Telegram, including an ambiguous name such as "infosys"
 - [x] 6.2 Add CLI commands `check`, `why`, `report`, `blueprint [lock]`; verify that `PYTHONPATH=src venv/bin/python -m stockbot.cli blueprint`, `… check TCS` and `… report` print the expected plain text
 - [x] 6.3 Update the README: blueprint setup (CSV import, plain number format, sharing, `NOTION_BLUEPRINT_DB`, the optional Notion "Lock database"), the thesis template, the new commands, the verdict meanings, the business profile and its limits (no segment split), the profit-making rule, that the wishlist is not used by convictions, and the reworded "not advice" line; verify that every README command runs as written
 
 ## 7. Integration check
 
 - [x] 7.1 Run `venv/bin/python -m pytest` and verify that all tests, old and new, pass
-- [ ] 7.2 End-to-end with the real Notion workspace and **no wishlist configured**: import the CSV, lock v1, `/check` a stock you don't own (BUY / WATCH / AVOID, with its business profile and profit figures), `/check` a company loss-making in each of its last two years (AVOID), `/check` a holding with a filled thesis (ticks respected), `/report`, then edit a threshold in Notion and verify the unlocked-edit notice, and `/blueprint lock` producing v2 with the diff
+- [x] 7.2 End-to-end with the real Notion workspace and **no wishlist configured**: import the CSV, lock v1, `/check` a stock you don't own (BUY / WATCH / AVOID, with its business profile and profit figures), `/check` a company loss-making in each of its last two years (AVOID), `/check` a holding with a filled thesis (ticks respected), `/report`, then edit a threshold in Notion and verify the unlocked-edit notice, and `/blueprint lock` producing v2 with the diff
