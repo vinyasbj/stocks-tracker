@@ -1,0 +1,42 @@
+# Runs beside the expense-tracker stack on the same VM and uses its Ollama.
+#
+# Depends on expense-tracker (~/expense-tracker) being up:
+#   - its network "expense-tracker_expense_net" (Compose fails fast if it's missing), and
+#   - its "expense-ollama" container with qwen2.5:7b pulled (its ollama-init pulls it).
+# Both bots send qwen2.5:7b with num_ctx 8192, so Ollama keeps one loaded copy for both.
+# After any `docker compose down` in expense-tracker, run `docker compose up -d` here to reattach.
+name: stock-bot
+
+services:
+  stock-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: stock-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # These override .env: the server's Ollama and the volume path
+      - OLLAMA_URL=http://expense-ollama:11434
+      - DB_PATH=/app/data/stockbot.db
+      # Log timestamps; scheduled jobs use Asia/Kolkata explicitly whatever this is
+      - TZ=Asia/Kolkata
+    volumes:
+      - stockbot_data:/app/data
+    networks:
+      - expense_net
+    # No ports: the bot only makes outbound connections (Telegram long polling)
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+volumes:
+  stockbot_data:
+
+networks:
+  expense_net:
+    external: true
+    name: expense-tracker_expense_net

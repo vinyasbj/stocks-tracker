@@ -18,6 +18,7 @@ class Settings(BaseModel):
     ollama_url: str
     ollama_model: str
     ollama_num_ctx: int
+    ollama_timeout: float = 180.0  # seconds per model call; CPU-only inference on the server is slow
     sec_user_agent: str
     poll_minutes: int
     digest_time_ist: time
@@ -26,6 +27,7 @@ class Settings(BaseModel):
     notion_portfolio_db: str
     notion_wishlist_db: str
     notion_blueprint_db: str = ""  # the conviction blueprint's rules
+    heartbeat_url: str = ""  # pinged after each monitor pass (dead-man's switch), "" = off
     news_alerts: bool = True  # push news stories as alerts (filings and regulator releases always go)
     notion_columns: dict[str, str]  # field -> column name overrides
     notion_portfolio_market: str  # "IN" | "US" | "" : used for rows without an Exchange column
@@ -56,6 +58,8 @@ def load_settings() -> Settings:
         ollama_url=os.getenv("OLLAMA_URL", "http://localhost:11434"),
         ollama_model=os.getenv("OLLAMA_MODEL", "qwen2.5:7b"),
         ollama_num_ctx=int(os.getenv("OLLAMA_NUM_CTX", "8192")),
+        ollama_timeout=float(os.getenv("OLLAMA_TIMEOUT", "180") or 180),
+        heartbeat_url=os.getenv("HEARTBEAT_URL", "").strip().rstrip("/"),
         sec_user_agent=os.getenv("SEC_USER_AGENT", ""),
         poll_minutes=int(os.getenv("POLL_MINUTES", "15")),
         digest_time_ist=time(int(hh), int(mm)),

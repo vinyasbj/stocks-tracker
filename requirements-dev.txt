@@ -1,0 +1,3 @@
+# Local development and CI: the runtime lock plus test tools. Not installed in the Docker image.
+-r requirements.txt
+pytest==9.2.0

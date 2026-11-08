@@ -1,0 +1,31 @@
+# Secrets (injected at runtime via env_file, never baked into the image)
+.env
+.env.*
+!.env.example
+.backup.env
+*.key
+*.pem
+
+# VCS, CI, editor and planning metadata
+.git
+.github
+.gitignore
+.claude
+**/.DS_Store
+openspec
+
+# Local environments & caches
+venv
+.venv
+**/__pycache__
+**/*.py[cod]
+.pytest_cache
+
+# Not needed at runtime: tests, laptop launchd agent, Notion templates
+tests
+deploy
+templates
+
+# Runtime state lives in the stockbot_data volume
+data
+**/*.log

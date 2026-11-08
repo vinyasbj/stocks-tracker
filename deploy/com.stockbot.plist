@@ -1,10 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
+  LAPTOP ONLY. The bot normally runs on the Oracle server (README, "Run on the server").
+  Keep this agent unloaded while the server bot runs: two processes polling the same bot token
+  make Telegram return 409 Conflict and both miss messages.
+
   Starts the bot when you log in and restarts it if it crashes.
     cp deploy/com.stockbot.plist ~/Library/LaunchAgents/
     launchctl load ~/Library/LaunchAgents/com.stockbot.plist
-  Stop:  launchctl unload ~/Library/LaunchAgents/com.stockbot.plist
+  Stop:  launchctl unload ~/Library/LaunchAgents/com.stockbot.plist && rm ~/Library/LaunchAgents/com.stockbot.plist
   Logs:  data/bot.log
 -->
 <plist version="1.0">

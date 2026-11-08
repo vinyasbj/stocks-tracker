@@ -1,0 +1,102 @@
+name: Apply settings
+
+# Copies bot settings from GitHub Secrets into the server's ~/stock-bot/.env and recreates the bot.
+# Add or update a secret named after a .env key under Settings -> Secrets and variables -> Actions,
+# then press "Run workflow". Keys without a secret are left as they are on the server.
+# OLLAMA_URL, DB_PATH and TZ are set by docker-compose.yml and can't be changed here.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: oracle-deploy
+
+jobs:
+  apply:
+    name: Update .env and recreate the bot
+    runs-on: ubuntu-latest
+    env:
+      ORACLE_HOST: ${{ secrets.ORACLE_HOST }}
+    steps:
+      - name: Check deployment readiness
+        if: env.ORACLE_HOST == ''
+        run: |
+          echo "::error::ORACLE_HOST secret is not configured, so there is no server to update."
+          exit 1
+
+      - name: Collect settings from secrets
+        env:
+          # Keep in sync with .env.example
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          ALLOWED_CHAT_IDS: ${{ secrets.ALLOWED_CHAT_IDS }}
+          OLLAMA_MODEL: ${{ secrets.OLLAMA_MODEL }}
+          OLLAMA_NUM_CTX: ${{ secrets.OLLAMA_NUM_CTX }}
+          OLLAMA_TIMEOUT: ${{ secrets.OLLAMA_TIMEOUT }}
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_PORTFOLIO_DB: ${{ secrets.NOTION_PORTFOLIO_DB }}
+          NOTION_WISHLIST_DB: ${{ secrets.NOTION_WISHLIST_DB }}
+          NOTION_BLUEPRINT_DB: ${{ secrets.NOTION_BLUEPRINT_DB }}
+          NOTION_PORTFOLIO_MARKET: ${{ secrets.NOTION_PORTFOLIO_MARKET }}
+          NOTION_WISHLIST_MARKET: ${{ secrets.NOTION_WISHLIST_MARKET }}
+          NOTION_COL_TICKER: ${{ secrets.NOTION_COL_TICKER }}
+          NOTION_COL_NAME: ${{ secrets.NOTION_COL_NAME }}
+          NOTION_COL_EXCHANGE: ${{ secrets.NOTION_COL_EXCHANGE }}
+          NOTION_COL_QTY: ${{ secrets.NOTION_COL_QTY }}
+          NOTION_COL_AVG_PRICE: ${{ secrets.NOTION_COL_AVG_PRICE }}
+          POLL_MINUTES: ${{ secrets.POLL_MINUTES }}
+          NEWS_ALERTS: ${{ secrets.NEWS_ALERTS }}
+          DIGEST_TIME_IST: ${{ secrets.DIGEST_TIME_IST }}
+          HEARTBEAT_URL: ${{ secrets.HEARTBEAT_URL }}
+        run: |
+          python3 - <<'PY'
+          import base64, os
+          keys = ["TELEGRAM_BOT_TOKEN", "ALLOWED_CHAT_IDS", "OLLAMA_MODEL", "OLLAMA_NUM_CTX",
+                  "OLLAMA_TIMEOUT", "SEC_USER_AGENT", "NOTION_TOKEN", "NOTION_PORTFOLIO_DB",
+                  "NOTION_WISHLIST_DB", "NOTION_BLUEPRINT_DB", "NOTION_PORTFOLIO_MARKET", "NOTION_WISHLIST_MARKET",
+                  "NOTION_COL_TICKER", "NOTION_COL_NAME", "NOTION_COL_EXCHANGE", "NOTION_COL_QTY",
+                  "NOTION_COL_AVG_PRICE", "POLL_MINUTES", "NEWS_ALERTS", "DIGEST_TIME_IST",
+                  "HEARTBEAT_URL"]
+          lines = []
+          for key in keys:
+              value = os.environ.get(key, "")
+              if not value:
+                  continue
+              if "\n" in value:
+                  raise SystemExit(f"::error::{key} contains a line break; .env values must be one line")
+              lines.append(f"{key}={value}")
+          if not lines:
+              raise SystemExit("::error::None of the settings secrets is set; nothing to apply.")
+          blob = base64.b64encode(("\n".join(lines) + "\n").encode()).decode()
+          print(f"::add-mask::{blob}")
+          with open(os.environ["GITHUB_ENV"], "a") as fh:
+              fh.write(f"SETTINGS_B64={blob}\n")
+          print("Settings to apply:", ", ".join(line.split("=", 1)[0] for line in lines))
+          PY
+
+      - name: Update server .env and recreate the bot
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ${{ secrets.ORACLE_USER || 'ubuntu' }}
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          port: ${{ secrets.ORACLE_SSH_PORT || 22 }}
+          envs: SETTINGS_B64
+          script: |
+            set -e
+            cd ~/stock-bot
+            umask 077
+            touch .env
+            cp .env .env.bak
+            printf '%s' "$SETTINGS_B64" | base64 -d > .env.settings
+            while IFS= read -r line; do
+              key="${line%%=*}"
+              { grep -v "^${key}=" .env || true; printf '%s\n' "$line"; } > .env.new
+              mv .env.new .env
+              echo "updated ${key}"
+            done < .env.settings
+            rm -f .env.settings
+            chmod 600 .env .env.bak
+            # env_file is read when the container is created, so recreate rather than restart
+            docker compose up -d --force-recreate --no-deps stock-bot
+            echo "Settings applied; stock-bot recreated (previous .env kept as .env.bak)"

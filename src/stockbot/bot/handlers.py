@@ -4,6 +4,7 @@ import logging
 from functools import wraps
 from html import escape
 
+import httpx
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ChatAction, ParseMode
 from telegram.ext import (
@@ -328,12 +329,35 @@ def sender(ctx: ContextTypes.DEFAULT_TYPE):
     return send
 
 
-async def monitor_job(ctx: ContextTypes.DEFAULT_TYPE):
+def heartbeat_client() -> httpx.AsyncClient:
+    return httpx.AsyncClient(timeout=10)
+
+
+async def heartbeat(url: str, ok: bool) -> None:
+    """Dead-man's switch: tell an outside service (e.g. healthchecks.io) that a monitor pass ran.
+
+    When the pings stop, because the bot hung or the server went down, that service alerts the investor.
+    A failed ping is only logged, never raised, and the URL is not logged: it identifies the check.
+    """
+    if not url:
+        return
     try:
-        sent = await engine(ctx).check(chats(ctx), sender(ctx))
+        async with heartbeat_client() as client:
+            (await client.get(url if ok else f"{url}/fail")).raise_for_status()
+    except Exception as e:
+        log.warning("heartbeat ping failed (%s)", type(e).__name__)
+
+
+async def monitor_job(ctx: ContextTypes.DEFAULT_TYPE):
+    eng = engine(ctx)
+    try:
+        sent = await eng.check(chats(ctx), sender(ctx))
         log.info("monitor pass: %d alerts", sent)
+        ok = True
     except Exception:
         log.exception("monitor pass failed")
+        ok = False
+    await heartbeat(eng.settings.heartbeat_url, ok)
 
 
 async def digest_job(ctx: ContextTypes.DEFAULT_TYPE):

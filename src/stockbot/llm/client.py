@@ -9,10 +9,14 @@ T = TypeVar("T", bound=BaseModel)
 
 
 class LLM:
-    """Local model via Ollama. num_ctx is set on every call: Ollama's default silently truncates."""
+    """Local model via Ollama. num_ctx is set on every call: Ollama's default silently truncates.
 
-    def __init__(self, url: str, model: str, num_ctx: int):
-        self.client = ollama.AsyncClient(host=url)
+    `timeout` bounds each call: the bot handles one update at a time, so a call that never returns
+    would block every command.
+    """
+
+    def __init__(self, url: str, model: str, num_ctx: int, timeout: float | None = None):
+        self.client = ollama.AsyncClient(host=url, timeout=timeout)
         self.model = model
         self.num_ctx = num_ctx
 

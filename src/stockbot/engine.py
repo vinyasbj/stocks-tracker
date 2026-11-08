@@ -66,7 +66,7 @@ class Engine:
     def __init__(self, settings: Settings, store: Store | None = None):
         self.settings = settings
         self.store = store or Store(settings.db_path)
-        self.llm = LLM(settings.ollama_url, settings.ollama_model, settings.ollama_num_ctx)
+        self.llm = LLM(settings.ollama_url, settings.ollama_model, settings.ollama_num_ctx, settings.ollama_timeout)
         self.monitor = Monitor(settings, self.store, self.llm)
         self._resolver: tickers.Resolver | None = None
 

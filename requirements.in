@@ -1,0 +1,14 @@
+# Direct runtime dependencies. Edit this file, then run scripts/lock_requirements.sh to regenerate
+# requirements.txt, which pins every package (direct and transitive) for the Docker image, CI and the
+# local venv. Test tools live in requirements-dev.txt.
+python-telegram-bot[job-queue]==21.11.1
+yfinance==1.8.0
+feedparser==6.0.14
+httpx==0.28.1
+# SEBI's server sends an incomplete certificate chain; the macOS/Windows trust store completes it.
+# On Linux it uses the system CA store (verified from the Oracle VM).
+truststore==0.10.5
+ollama==0.6.3
+pydantic==2.14.2
+rapidfuzz==3.14.6
+python-dotenv==1.2.4

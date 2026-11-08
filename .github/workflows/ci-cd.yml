@@ -1,0 +1,72 @@
+name: CI/CD
+
+# Every push runs the tests; only a push to main deploys.
+on:
+  push:
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Compile check
+        run: python -m compileall -q src
+
+      - name: Run test suite
+        run: pytest -q
+
+  deploy:
+    name: Deploy to Oracle Cloud VM
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    concurrency:
+      group: oracle-deploy
+    runs-on: ubuntu-latest
+    env:
+      ORACLE_HOST: ${{ secrets.ORACLE_HOST }}
+    steps:
+      - name: Check deployment readiness
+        if: env.ORACLE_HOST == ''
+        run: |
+          echo "ORACLE_HOST secret is not configured in this repository's GitHub Secrets."
+          echo "Skipping the SSH deployment until the Oracle VM's secrets are added."
+
+      - name: Deploy over SSH
+        if: env.ORACLE_HOST != ''
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ${{ secrets.ORACLE_USER || 'ubuntu' }}
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          port: ${{ secrets.ORACLE_SSH_PORT || 22 }}
+          script: |
+            set -e
+            cd ~/stock-bot
+            git pull --ff-only origin main
+            # Only this service: expense-tracker's containers are never touched
+            docker compose build stock-bot
+            docker compose up -d stock-bot
+            docker image prune -f
+            # image prune leaves BuildKit's cache; drop layers older than a week so the disk doesn't fill
+            docker builder prune -f --filter until=168h
+            docker compose ps stock-bot
+            echo "Deployed $(git rev-parse --short HEAD)"

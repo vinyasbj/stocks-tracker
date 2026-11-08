@@ -1,6 +1,6 @@
 # stock-bot
 
-A personal Telegram bot for Indian (NSE) and US stocks. It runs on your laptop with a free local LLM.
+A personal Telegram bot for Indian (NSE) and US stocks, with a free local LLM. It runs on an Oracle Cloud VM beside the expense-tracker bot (see [Run on the server](#run-on-the-server)), or on your laptop.
 
 - **`/analyze TICKER`**: strengths and weaknesses, key ratios, the latest quarter versus the previous quarter and the same quarter last year, and a short summary.
 - **`/results TICKER`**: the last five quarters in a table, the result filings, and an explanation.
@@ -24,10 +24,10 @@ Code fetches the data, computes the ratios and applies fixed rules to find stren
 | News | Google News RSS, Yahoo news | same |
 | Regulators | SEBI, RBI (press releases and notifications) | SEC press releases |
 
-## Setup
+## Setup (run locally)
 
 ```sh
-python3 -m venv venv && venv/bin/python -m pip install -r requirements.txt
+python3 -m venv venv && venv/bin/python -m pip install -r requirements-dev.txt
 ollama pull qwen2.5:7b        # skip if you already have it
 cp .env.example .env
 ```
@@ -43,6 +43,111 @@ cp .env.example .env
 4. Run `./run.sh`, send `/start` to your bot, copy the chat ID it replies with into `ALLOWED_CHAT_IDS`, and restart. The bot ignores every chat not on that list.
 
 To start the bot when you log in, see [deploy/com.stockbot.plist](deploy/com.stockbot.plist). Alerts only arrive while the laptop is awake.
+
+**While the server bot runs, don't run `./run.sh` or the launchd agent with the same token.** Two processes polling one bot token make Telegram return 409 Conflict, and both miss messages. To try changes locally, create a second test bot with @BotFather and put its token in your local `.env`. The `stockbot.cli` commands (see [Try it without Telegram](#try-it-without-telegram)) don't poll Telegram, so they are always safe to run.
+
+## Run on the server
+
+The bot runs in Docker on the Oracle Cloud VM, next to the expense-tracker stack, and uses that stack's Ollama. A push to `main` that passes the tests deploys itself.
+
+```
+ Oracle VM (Ampere A1)
+ +------------------------------------------------------------------+
+ |  ~/expense-tracker                   ~/stock-bot (this repo)     |
+ |  expense-bot                         stock-bot                   |
+ |  expense-ollama  <-- expense-tracker_expense_net --+             |
+ |   (qwen2.5:7b, one copy for both bots)             |             |
+ |  expense-logs (Dozzle: shows both)   volume:                     |
+ |                                      stock-bot_stockbot_data     |
+ +------------------------------------------------------------------+
+```
+
+### What it depends on
+
+- **The expense-tracker stack** running from `~/expense-tracker`, with `qwen2.5:7b` pulled (its `ollama-init` does that). Both bots send `qwen2.5:7b` with context 8192, so Ollama keeps one copy in memory. Changing `OLLAMA_MODEL` or `OLLAMA_NUM_CTX` here would load a second copy.
+- **Its Docker network** `expense-tracker_expense_net`. After any `docker compose down` in `~/expense-tracker`, run `docker compose up -d` in `~/stock-bot` to reattach.
+
+### First install (once)
+
+1. **Clone** the repo to `~/stock-bot` the same way `~/expense-tracker` was cloned (`git -C ~/expense-tracker remote -v` shows how).
+2. **Measure the model** on the server: run `docker exec -it expense-ollama ollama run qwen2.5:7b --verbose` and ask something short to warm it up, then paste a long prompt (a few pages of text). The *prompt eval rate* and *eval rate* lines give tokens per second. Set `OLLAMA_TIMEOUT` to the long prompt's total time plus 50%.
+3. **Settings**: `cp .env.example .env`, fill it in as in [Setup](#setup-run-locally), then `chmod 600 .env`. Leave out `OLLAMA_URL` and `DB_PATH`: `docker-compose.yml` sets both.
+4. **Stop the laptop bot**: `launchctl unload ~/Library/LaunchAgents/com.stockbot.plist && rm ~/Library/LaunchAgents/com.stockbot.plist`.
+5. **Move the database**, so your locked blueprint keeps its version and old alerts aren't sent again:
+   ```sh
+   # laptop
+   sqlite3 data/stockbot.db ".backup stockbot-migrate.db"
+   scp stockbot-migrate.db <server>:~/
+   # server
+   docker volume create stock-bot_stockbot_data
+   docker run --rm -v stock-bot_stockbot_data:/data -v ~/stockbot-migrate.db:/src.db:ro alpine \
+     sh -c 'cp /src.db /data/stockbot.db && chown 1000:1000 /data/stockbot.db'
+   ```
+6. **Start**: `docker compose up -d --build`, then `docker compose logs -f stock-bot`. Look for "stock bot running" and the Notion sync count, and make sure there's no "Ollama is not reachable" and no 409 Conflict. Send `/blueprint` to check the version.
+
+### Deploys
+
+[.github/workflows/ci-cd.yml](.github/workflows/ci-cd.yml) runs the tests on every push. On a push to `main` it also connects to the server and runs `git pull`, `docker compose build stock-bot` and `docker compose up -d stock-bot`, then prunes old images and build cache. The expense-tracker containers aren't touched. In **Settings → Secrets and variables → Actions** of this repository, add the same values expense-tracker uses (secrets belong to each repository):
+
+- `ORACLE_HOST`: the VM's public IP
+- `ORACLE_USER`: `ubuntu`
+- `ORACLE_SSH_KEY`: the private SSH key
+- `ORACLE_SSH_PORT`: only if it isn't 22
+
+Without `ORACLE_HOST` the tests still run and the deploy is skipped.
+
+### Changing settings
+
+The bot reads `~/stock-bot/.env` on the server. To change a value without SSH, add or update a GitHub secret with the same name as the `.env` key, then run **Actions → Apply settings → Run workflow**. It writes those keys into the server `.env`, keeps the previous file as `.env.bak`, and recreates the bot. Keys without a secret are left alone. `OLLAMA_URL`, `DB_PATH` and `TZ` come from `docker-compose.yml`.
+
+A restart alone, including Dozzle's **Restart** button, keeps the old values: Docker reads `.env` only when it creates the container. After editing `.env` by hand, run `docker compose up -d --force-recreate stock-bot`.
+
+### Logs and alerts if the bot stops
+
+- **Logs**: in the expense-tracker Dozzle (`ssh -L 8888:localhost:8888 <server>`, then open http://localhost:8888), or `docker compose logs -f stock-bot`.
+- **Heartbeat**: Docker restarts the bot if it crashes, but not if it hangs, and nothing restarts a stopped VM. So the bot pings `HEARTBEAT_URL` after every monitor pass (or `<url>/fail` when the pass fails). Create a free check at [healthchecks.io](https://healthchecks.io) with period 15 minutes and grace 30 minutes, add email or Telegram as the notification, and set its ping URL as `HEARTBEAT_URL`. When the pings stop, healthchecks.io tells you.
+
+### Backups
+
+[scripts/backup.sh](scripts/backup.sh) saves a consistent copy of the database to `~/backups/stock-bot/stockbot-YYYY-MM-DD.db.gz` without stopping the bot, and keeps 30 days. It also uploads each copy off the VM, so a lost VM doesn't take the backups with it.
+
+1. In the OCI console (home region): **Storage → Buckets → Create bucket** `stock-bot-backups` (Standard, private). Under **Lifecycle Policy Rules**, delete objects older than 90 days.
+2. In the bucket: **Pre-Authenticated Requests → Create**: target *Bucket*, access *Permit object writes*, expiry 1 year. Copy the URL (it ends in `/o/`).
+3. On the server: `printf 'BACKUP_PAR_URL=%s\n' '<url>' > ~/stock-bot/.backup.env && chmod 600 ~/stock-bot/.backup.env`. The URL is a credential: keep it out of git and chat.
+4. Add the cron job (`crontab -e`) and run it once by hand:
+   ```
+   45 2 * * * ~/stock-bot/scripts/backup.sh >> ~/backups/stock-bot/backup.log 2>&1
+   ```
+
+**The upload URL expires on: _(fill in when created)_.** After that the script keeps local copies but exits with an error. Create a new URL before then.
+
+A snapshot is about 0.5 MB, so the bucket stays far inside the free 20 GB.
+
+**Restore**: copy the snapshot into `~/stock-bot`, from `~/backups/stock-bot/` or by downloading it from the bucket in the OCI console, then:
+```sh
+cd ~/stock-bot && docker compose stop stock-bot
+gunzip -k stockbot-YYYY-MM-DD.db.gz
+docker run --rm -v stock-bot_stockbot_data:/data -v "$PWD/stockbot-YYYY-MM-DD.db":/src.db:ro alpine \
+  sh -c 'cp /src.db /data/stockbot.db && chown 1000:1000 /data/stockbot.db'
+docker compose start stock-bot
+```
+
+### Oracle costs
+
+The tenancy is Pay-As-You-Go. In June 2026 Oracle cut the Always Free Ampere A1 allowance from 4 OCPU / 24 GB to 2 OCPU / 12 GB, and it hasn't clearly said whether existing PAYG VMs above that stay free. Keep a small budget alert (**Billing & Cost Management → Budgets**), and check **Cost Analysis** grouped by SKU: the Ampere A1 lines should cost $0.00. Budgets only alert; they never stop spending.
+
+If charges appear, resize the VM rather than deleting it (**Compute → Instances → Edit → Edit shape**, 2 OCPU / 12 GB). A new VM may not be allowed above the free size. Both bots still fit, because they share one model, but replies take about twice as long, so raise `OLLAMA_TIMEOUT`.
+
+### Going back to the laptop
+
+1. On the server, stop the bot and copy its database out of the volume (with the bot stopped, the file is consistent):
+   ```sh
+   cd ~/stock-bot && docker compose stop stock-bot
+   docker run --rm -v stock-bot_stockbot_data:/data:ro -v ~/:/out alpine cp /data/stockbot.db /out/stockbot-final.db
+   ```
+2. On the laptop: `scp <server>:~/stockbot-final.db data/stockbot.db`, then `./run.sh` or load the launchd agent.
+
+The server bot must stay stopped while the laptop runs (409 Conflict).
 
 ## Conviction blueprint
 
