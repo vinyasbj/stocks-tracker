@@ -66,6 +66,9 @@ def compute(f: dict, today: date | None = None) -> dict:
         m["rev_yoy"] = pct_change(latest.get("revenue"), (yoy or {}).get("revenue"))
         m["ni_qoq"] = pct_change(latest.get("net_income"), (prev or {}).get("net_income"))
         m["ni_yoy"] = pct_change(latest.get("net_income"), (yoy or {}).get("net_income"))
+        # What the changes compare against, so a loss can be described as widening or narrowing.
+        m["ni_qoq_base"] = (prev or {}).get("net_income")
+        m["ni_yoy_base"] = (yoy or {}).get("net_income")
         m["q_op_margin"] = _margin(latest, "operating_income")
         yoy_margin = _margin(yoy, "operating_income")
         m["op_margin_change_yoy"] = (
@@ -103,7 +106,10 @@ def compute(f: dict, today: date | None = None) -> dict:
     if m.get("debt_to_equity") is None and f.get("debt_to_equity_pct") is not None:
         m["debt_to_equity"] = f["debt_to_equity_pct"] / 100
     m["roe"] = f["roe"] * 100 if f.get("roe") is not None else None
-    m["net_margin"] = f["net_margin"] * 100 if f.get("net_margin") is not None else m.get("fy_net_margin")
+    net_margin = f.get("net_margin")
+    if net_margin == 0 and m.get("q_net_income"):
+        net_margin = None  # Yahoo reports 0 for a company with (almost) no revenue; there is no margin to speak of
+    m["net_margin"] = net_margin * 100 if net_margin is not None else m.get("fy_net_margin")
     m["pe"] = f.get("pe")
     m["op_margin"] = f["operating_margin"] * 100 if f.get("operating_margin") is not None else m.get("q_op_margin")
     m["current_ratio"] = f.get("current_ratio")

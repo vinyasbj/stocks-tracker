@@ -65,9 +65,9 @@ A holding's weight SHALL be its market value divided by the total market value o
 - **WHEN** the USD/INR rate can't be fetched
 - **THEN** no weight trigger fires, and the digest notes that weights were not checked
 
-### Requirement: `/check` shows the thesis tracking
-For a stock with a thesis, `/check` SHALL show each pillar's status (met, not met, no data, or not measurable with the model's reading), each breaker's status (hit, clear, no data, or possible), and the action plan's triggers with the current price or weight.
+### Requirement: `/why` shows the thesis tracking
+For a stock with a thesis, `/why` SHALL show each pillar's status (met, not met, no data, or not measurable with the model's reading), each breaker's status (hit, clear, no data, or possible), and the action plan's triggers with the current price or weight.
 
 #### Scenario: Check with tracking
-- **WHEN** the investor sends `/check GOOGL` and its thesis has four pillars, three breakers and an add-below price
+- **WHEN** the investor sends `/why GOOGL` and its thesis has four pillars, three breakers and an add-below price
 - **THEN** the reply lists the four pillar statuses, the three breaker statuses, and the add-below price beside the current price

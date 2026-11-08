@@ -28,7 +28,7 @@ HELP = (
     "/analyze <code>TICKER</code> — strengths, weaknesses, latest quarter\n"
     "/results <code>TICKER</code> — latest quarterly results explained\n"
     "/news <code>TICKER</code> — latest filings and news with impact tags\n"
-    "/check <code>TICKER</code> (or /why) — the stock judged by your conviction blueprint\n"
+    "/why <code>TICKER</code> — the stock judged by your conviction blueprint\n"
     "/report — every holding judged by your blueprint\n"
     "/blueprint — your locked blueprint; <code>/blueprint lock</code> adopts your Notion edits\n"
     "/portfolio — your Notion portfolio (with P&L) and wishlist\n"
@@ -155,6 +155,10 @@ async def do_check(update, ctx, sec: Security):
             return
         msg = await reply(update, cv.render_check(c, None, None))
         profile = await eng.business_profile(sec, c.research)
+        if c.fund:  # no verdict, so nothing for the model to explain
+            await msg.edit_text(cv.render_check(c, profile, None), parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+            ctx.chat_data["last_sec"] = sec
+            return
         with contextlib.suppress(Exception):
             await msg.edit_text(cv.render_check(c, profile, None), parse_mode=ParseMode.HTML, disable_web_page_preview=True)
         summary = await eng.conviction_summary(c)
@@ -349,7 +353,7 @@ def register(app: Application) -> None:
     app.add_handler(CommandHandler("analyze", command("an")))
     app.add_handler(CommandHandler("results", command("rs")))
     app.add_handler(CommandHandler("news", command("nw")))
-    app.add_handler(CommandHandler(["check", "why"], command("ck")))
+    app.add_handler(CommandHandler("why", command("ck")))
     app.add_handler(CommandHandler("report", report_cmd))
     app.add_handler(CommandHandler("blueprint", blueprint_cmd))
     app.add_handler(CommandHandler("portfolio", portfolio))

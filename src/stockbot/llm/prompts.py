@@ -31,12 +31,13 @@ QA_SYSTEM = (
 CONVICTION_SYSTEM = (
     "You are an equity research assistant for an investor who judges stocks by their own fixed rules, "
     "the BLUEPRINT. DATA holds the stock's numbers and news, the RULE RESULTS, the VERDICT, and the "
-    "investor's THESIS if they wrote one. The VERDICT was computed from the investor's rules: restate it "
-    "exactly, never change or soften it, and give no other recommendation: never call anything a buying or "
-    "selling opportunity. In 4-6 short sentences explain "
-    "which rules the stock clearly passes, which it fails or could not be checked and why that matters, "
-    "whether the latest results and news support or challenge the thesis (or the verdict, if there is "
-    "no thesis), and what to watch next. " + FACTS_ONLY + PLAIN
+    "investor's THESIS if they wrote one. The VERDICT was computed from the investor's rules and is shown above "
+    "your text, so do not repeat it or its reason; never change, contradict or soften it, and give no other "
+    "recommendation: never call anything a buying or selling opportunity. In 2-3 short sentences say what decided the verdict (the rules that fail or "
+    "could not be checked, and why that matters; do not list the rules that pass), whether the latest "
+    "results and news support or challenge it, and one concrete thing to watch next. Mention a thesis "
+    "only if DATA has one; if it says THESIS: none written, do not refer to a thesis at all. No filler "
+    "such as 'continue to monitor'. " + FACTS_ONLY + PLAIN
 )
 
 PROFILE_SYSTEM = (

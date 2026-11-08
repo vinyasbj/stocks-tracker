@@ -51,6 +51,14 @@ The bot SHALL report every row it cannot use, with the reason, and SHALL NOT gue
 - **WHEN** a numeric rule's Condition is "between"
 - **THEN** the row is reported as needing ≥ or ≤
 
+#### Scenario: Strict condition
+- **WHEN** a numeric rule's Condition is ">", "<", "above" or "below"
+- **THEN** the row is reported as needing ≥ or ≤, and is not read as "or equal"
+
+#### Scenario: Unknown pillar
+- **WHEN** a row's Pillar is empty or not one of Business, Quality, Growth, Safety, Valuation or Settings (for example "Qualty")
+- **THEN** the row is reported with the allowed pillars, and is not used
+
 #### Scenario: Percentage written as a fraction
 - **WHEN** a percentage rule's Threshold is 0.15, as a Notion percent-formatted number stores it
 - **THEN** the row is reported, asking for 15 in a plain number column
@@ -70,16 +78,16 @@ A row in the Settings pillar named "Scored rules pass bar" SHALL set the share o
 The bot SHALL judge stocks only by the latest locked version of the blueprint, never directly by the current Notion contents. Each locked version has a number (v1, v2, …) and a lock date.
 
 #### Scenario: Nothing locked yet
-- **WHEN** the investor sends `/check TCS` before any blueprint is locked
+- **WHEN** the investor sends `/why TCS` before any blueprint is locked
 - **THEN** the bot gives no verdict and explains how to set up the blueprint in Notion, review it with `/blueprint`, and lock it with `/blueprint lock`
 
 #### Scenario: Notion edited after locking
-- **WHEN** v1 is locked, the investor then changes a threshold in Notion, and sends `/check TCS`
+- **WHEN** v1 is locked, the investor then changes a threshold in Notion, and sends `/why TCS`
 - **THEN** the verdict uses v1, and the reply notes that Notion has unlocked edits and how to adopt them
 
 #### Scenario: Notion unreachable
 - **WHEN** a blueprint is locked and Notion cannot be reached
-- **THEN** `/check` and `/report` still work with the locked version
+- **THEN** `/why` and `/report` still work with the locked version
 
 ### Requirement: Locking creates a new version on purpose
 `/blueprint lock` SHALL read the blueprint from Notion and store it as the next version, but only when it differs from the latest locked version and has no invalid rows. The reply SHALL list what changed. Reordering rows in Notion SHALL NOT count as a change. Earlier versions SHALL be kept.

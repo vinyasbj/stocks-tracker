@@ -147,9 +147,10 @@ COLUMNS = {
     "threshold": ["threshold", "value", "target", "limit"],
     "must": ["must pass", "must", "mandatory", "required", "hard rule", "deal breaker"],
 }
+# Only "or equal" wordings: "> 15" or "above 15" is a different rule, so it is reported, never mapped to ≥.
 OPS = {
-    ">=": [">=", "≥", ">", "at least", "min", "minimum", "above"],
-    "<=": ["<=", "≤", "<", "at most", "max", "maximum", "below"],
+    ">=": [">=", "≥", "at least", "min", "minimum"],
+    "<=": ["<=", "≤", "at most", "max", "maximum"],
 }
 TRUE = {"yes", "y", "true", "1", "must", "✓", "✔", "x"}
 PASS_BAR_SETTING = "scored rules pass bar"
@@ -160,9 +161,10 @@ def _op(text) -> str | None:
     return next((op for op, words in OPS.items() if t in words), None)
 
 
-def _pillar(text) -> str:
+def _pillar(text) -> str | None:
+    """One of the five pillars or Settings, in its proper case; None for anything else."""
     t = str(text or "").strip()
-    return next((p for p in [*PILLARS, SETTINGS] if p.lower() == t.lower()), t.title() or "Other")
+    return next((p for p in [*PILLARS, SETTINGS] if p.lower() == t.lower()), None)
 
 
 def _must(v) -> bool:
@@ -196,6 +198,9 @@ def parse_rules(pages: list[dict]) -> Parsed:
         if not text:
             continue  # empty row
         pillar = _pillar(get("pillar"))
+        if pillar is None:
+            problems.append(f"{text}: pillar must be {', '.join(PILLARS)} or {SETTINGS}, not {get('pillar')!r}")
+            continue
         threshold = notion._number(get("threshold"))
 
         if pillar == SETTINGS:

@@ -83,7 +83,7 @@ In `thesis.py`:
 `decide()` gains a `breakers_hit` argument and inserts the REVIEW step right after SELL, per the modified `conviction-verdict` spec.
 
 ### 7. Model-read evidence
-One structured call per stock per review (and per `/check` that has unmeasurable lines), using a new `TRACKING_SYSTEM` prompt. Input: the numbered unmeasurable lines (each labelled pillar or breaker), plus results filings and news since the last review (`/check`: the last 90 days), from `report.updates()`. Output schema: `[{index, status: supports|challenges|no_evidence, source, quote ≤ 25 words}]`. For a breaker, `challenges` means "possibly hit". The prompt tells the model that "no evidence" is the safe default. Model unavailable means "not checked". *Alternative*: having the model decide breakers outright. Rejected: a 7B model reading headlines is not reliable enough to move a verdict, and "code decides" was agreed.
+One structured call per stock per review (and per `/why` that has unmeasurable lines), using a new `TRACKING_SYSTEM` prompt. Input: the numbered unmeasurable lines (each labelled pillar or breaker), plus results filings and news since the last review (`/why`: the last 90 days), from `report.updates()`. Output schema: `[{index, status: supports|challenges|no_evidence, source, quote ≤ 25 words}]`. For a breaker, `challenges` means "possibly hit". The prompt tells the model that "no evidence" is the safe default. Model unavailable means "not checked". *Alternative*: having the model decide breakers outright. Rejected: a 7B model reading headlines is not reliable enough to move a verdict, and "code decides" was agreed.
 
 ### 8. Weight and FX
 `market.fetch_fx("USDINR=X")` is cached for 6 hours. The weight uses the quotes `digest.build()` already fetches, so there is no second quote round-trip. Holdings without a quantity are excluded from both the numerator and the denominator.
@@ -93,7 +93,7 @@ One structured call per stock per review (and per `/check` that has unmeasurable
 
 ### 10. Commands
 - `/log`: regex `^(\S+)\s+(BUY|ADD|TRIM|SELL)\s+([\d.]+)\s*@\s*[₹$]?([\d.,]+)\s*(.*)$` (case-insensitive). The ticker goes through `pick()`, and the stock must have a page. CLI: `log …`.
-- Start thesis: a callback `st|SYMBOL|MARKET` on `/check` when the stock has no page. Before creating anything, the bot re-syncs and re-checks for a page, which makes a double tap harmless. It builds properties from the detected wishlist columns and the data source's property types (title, rich_text, select), and children from `templates/thesis.md` converted to blocks. The BLUEPRINT CHECKS section is generated from the locked blueprint. Afterwards it syncs and replies with the page URL.
+- Start thesis: a callback `st|SYMBOL|MARKET` on `/why` when the stock has no page. Before creating anything, the bot re-syncs and re-checks for a page, which makes a double tap harmless. It builds properties from the detected wishlist columns and the data source's property types (title, rich_text, select), and children from `templates/thesis.md` converted to blocks. The BLUEPRINT CHECKS section is generated from the locked blueprint. Afterwards it syncs and replies with the page URL.
 
 ## Risks / Trade-offs
 

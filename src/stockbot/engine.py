@@ -9,7 +9,7 @@ from html import escape
 from typing import Awaitable, Callable
 
 from .alerts.monitor import Monitor
-from .analysis import blueprint, report, thesis, verdict
+from .analysis import blueprint, report, signals, thesis, verdict
 from .analysis.conviction import (
     BlueprintStatus, Conviction, LockResult, Profile, ReportEntry, ReportResult, summary_data,
 )
@@ -31,6 +31,10 @@ EXCERPT = 300
 Send = Callable[[int, str], Awaitable[None]]
 
 
+# "QQQM", "us:qqqm", "NSE:NIFTYBEES", "NIFTYBEES.NS": a ticker as typed, never a company name in words.
+TICKER_ONLY = re.compile(r"(?:(?P<prefix>NSE|BSE|US):)?(?P<symbol>[A-Za-z0-9&\-]{1,15}(?:\.(?:NS|BO))?)", re.IGNORECASE)
+
+
 def excerpt(text: str, limit: int = EXCERPT) -> str:
     """The start of a long text, cut at a sentence or word."""
     text = " ".join(text.split())
@@ -44,6 +48,12 @@ def excerpt(text: str, limit: int = EXCERPT) -> str:
 def invents_numbers(text: str, source: str) -> bool:
     """True when `text` has a number that `source` does not: the model made it up."""
     return any(n not in source for n in re.findall(r"\d+(?:[.,]\d+)?", text))
+
+
+def first_sentences(text: str, n: int = 3) -> str:
+    """The first `n` sentences ("24.3%" and "U.S." don't end one: a sentence ends before a capital)."""
+    parts = re.split(r"(?<=[.!?])\s+(?=[A-Z\"'(])", text.strip())
+    return " ".join(parts[:n])
 
 
 def plain_text(text: str) -> str:
@@ -67,7 +77,21 @@ class Engine:
         return self._resolver
 
     async def resolve(self, query: str) -> list[Security]:
-        return (await self.resolver()).resolve(query)
+        """Stocks from the NSE and SEC lists; failing that, an exact ticker on Yahoo (ETFs and funds aren't listed)."""
+        found = (await self.resolver()).resolve(query)
+        m = TICKER_ONLY.fullmatch(query.strip())
+        if not m:
+            return found
+        mkt = {"NSE": "IN", "BSE": "IN", "US": "US"}.get((m["prefix"] or "").upper())
+        if not found:
+            sec = await asyncio.to_thread(self._lookup, m["symbol"], mkt)
+            return [sec] if sec else []
+        symbol = re.sub(r"\.(NS|BO)$", "", m["symbol"], flags=re.IGNORECASE).upper()
+        if any(s.symbol == symbol for s in found):
+            return found
+        # Only fuzzy name matches ("URA" → "Accuracy Shipping"): an ETF or fund with exactly that ticker wins.
+        fund = await asyncio.to_thread(self._lookup, m["symbol"], mkt, market.FUND_TYPES)
+        return [fund] if fund else found
 
     async def research(self, sec: Security, with_updates: bool = True) -> report.Research:
         return await asyncio.to_thread(report.gather, sec, self.store, self.settings, with_updates)
@@ -134,13 +158,13 @@ class Engine:
             log.info("notion sync: +%s -%s", [x.symbol for x in rep.added], [x.symbol for x in rep.removed])
         return rep
 
-    def _lookup(self, symbol: str, mkt: str | None) -> Security | None:
+    def _lookup(self, symbol: str, mkt: str | None, types: tuple[str, ...] | None = None) -> Security | None:
         """market.lookup_symbol, cached for a week (misses for a day) so syncs stay fast."""
-        key = f"lookup:{mkt}:{symbol.upper()}"
+        key = f"lookup:{mkt}:{symbol.upper()}" + (f":{'|'.join(types)}" if types else "")
         hit = self.store.cache_get(key)
         if hit is not None:
             return Security(**hit) if hit else None
-        sec = market.lookup_symbol(symbol, mkt)
+        sec = market.lookup_symbol(symbol, mkt, types) if types else market.lookup_symbol(symbol, mkt)
         self.store.cache_set(key, sec.__dict__ if sec else {}, 7 * 24 * 3600 if sec else 24 * 3600)
         return sec
 
@@ -229,11 +253,14 @@ class Engine:
         held = holding is not None and holding.list_type == "portfolio"
         r = await self.research(sec, with_updates)
         th, note, check_note = await asyncio.to_thread(self._thesis, holding)
-        checks = verdict.evaluate(locked.blueprint.rules, r.metrics, r.fundamentals, th, check_note or "no thesis in Notion")
+        checks = verdict.evaluate(
+            locked.blueprint.rules, r.metrics, r.fundamentals, th, check_note or "no thesis in Notion", held=held
+        )
         v = verdict.decide(checks, held, locked.blueprint.pass_bar)
         level = (holding.conviction if holding else None) or (th.conviction if th else None)
-        c = Conviction(sec, r, holding, locked, v, th, note, level, verdict.mismatch(level, v))
-        if check_notion:
+        fund = signals.is_fund(r.fundamentals)  # shown, not judged: no verdict, so nothing to disagree with
+        c = Conviction(sec, r, holding, locked, v, th, note, level, None if fund else verdict.mismatch(level, v))
+        if check_notion and not fund:
             c.unlocked = (await self.blueprint_status()).diff
         return c
 
@@ -243,6 +270,11 @@ class Engine:
         rep = ReportResult(locked)
         if locked is None:
             return rep
+        try:
+            await self.sync()  # rows added or removed in Notion since the last sync
+        except Exception as e:
+            log.warning("report: Notion sync failed, using the last synced list: %s", e)
+            rep.sync_error = str(e) or type(e).__name__
         gate = asyncio.Semaphore(REPORT_CONCURRENCY)
 
         async def one(h: Holding) -> ReportEntry:
@@ -263,6 +295,8 @@ class Engine:
         desc = (r.fundamentals.get("business_summary") or "").strip()
         if not desc:
             return Profile(None, "none")
+        if signals.is_fund(r.fundamentals):
+            return Profile(excerpt(desc), "description")  # what a fund holds; the company prompt doesn't fit it
         key = f"profile:{sec.market}:{sec.symbol}:{hashlib.sha1(desc.encode()).hexdigest()[:12]}"
         if (hit := self.store.cache_get(key)) is not None:
             return Profile(hit["text"], hit["source"])
@@ -282,10 +316,10 @@ class Engine:
     async def conviction_summary(self, c: Conviction) -> str:
         data = f"{report.data_block(c.research)}\n{summary_data(c)}"
         try:
-            return plain_text(await self.llm.chat(
+            return first_sentences(plain_text(await self.llm.chat(
                 [{"role": "system", "content": CONVICTION_SYSTEM},
                  {"role": "user", "content": f"DATA:\n{data}\n\nExplain the verdict."}]
-            ))
+            )))
         except Exception as e:
             log.warning("LLM failed: %s", e)
             return f"(The local model is unavailable: {e}. Is `ollama serve` running?)"

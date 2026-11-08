@@ -22,7 +22,7 @@ When Notion refuses a write for lack of permission, the bot SHALL stop attemptin
 
 #### Scenario: Integration still read-only
 - **WHEN** the first review-log write is refused by Notion
-- **THEN** the investor gets one Telegram message explaining how to add "Insert content", and `/check`, `/report` and alerts keep working
+- **THEN** the investor gets one Telegram message explaining how to add "Insert content", and `/why`, `/report` and alerts keep working
 
 #### Scenario: Permission granted later
 - **WHEN** the investor adds "Insert content" and the next monitor pass runs
@@ -74,10 +74,10 @@ When a Notion sync finds a stock newly in the portfolio, the bot SHALL append on
 
 #### Scenario: No Notion page
 - **WHEN** the stock is in neither Notion list
-- **THEN** nothing is written and the bot suggests the Start-thesis button on `/check`
+- **THEN** nothing is written and the bot suggests the Start-thesis button on `/why`
 
-### Requirement: A thesis can be started from `/check`
-For a stock with no Notion row, `/check` SHALL offer a "Start thesis" button. The button SHALL create a wishlist row with the stock's ticker, name and exchange in the detected columns. The row's page holds the thesis template, headed with the stock's name and today's date, and has a BLUEPRINT CHECKS section built from the locked blueprint's judgment rules. The bot then syncs and replies with the page link.
+### Requirement: A thesis can be started from `/why`
+For a stock with no Notion row, `/why` SHALL offer a "Start thesis" button. The button SHALL create a wishlist row with the stock's ticker, name and exchange in the detected columns. The row's page holds the thesis template, headed with the stock's name and today's date, and has a BLUEPRINT CHECKS section built from the locked blueprint's judgment rules. The bot then syncs and replies with the page link.
 
 #### Scenario: New stock
 - **WHEN** the investor checks TCS, which is in neither list, and taps "Start thesis"

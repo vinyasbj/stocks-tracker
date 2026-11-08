@@ -7,11 +7,15 @@ The investor's written reason for owning each stock, kept in the stock's Notion 
 ## ADDED Requirements
 
 ### Requirement: A stock's thesis is the body of its Notion portfolio row
-The bot SHALL read a stock's thesis from the page body of its row in the Notion portfolio database. When a stock has several portfolio rows (several lots), the bot SHALL use the first row whose page has a thesis. The Notion wishlist SHALL NOT be read for theses.
+The bot SHALL read a stock's thesis from the page body of its row in the Notion portfolio database. When a stock has several portfolio rows (several lots), the bot SHALL use the first row whose page has a thesis. A stock SHALL be matched to its portfolio row by symbol and market only, whatever spelling of the company name a lookup returns. The Notion wishlist SHALL NOT be read for theses.
 
 #### Scenario: Holding with a thesis
 - **WHEN** GOOGL's portfolio row has the thesis template filled in its page
-- **THEN** `/check GOOGL` shows that thesis
+- **THEN** `/why GOOGL` shows that thesis
+
+#### Scenario: Company name spelt differently
+- **WHEN** the portfolio row for GOOGL was synced as "ALPHABET INC" and `/why GOOGL` resolves it as "Alphabet Inc."
+- **THEN** the bot still treats GOOGL as a holding and reads its thesis
 
 #### Scenario: Several lots
 - **WHEN** GOOGL has two portfolio rows and only the second row's page has a thesis
@@ -78,4 +82,4 @@ When a stock's page cannot be read, the bot SHALL still evaluate the stock, trea
 
 #### Scenario: Page not shared with the integration
 - **WHEN** Notion returns "not found" for a holding's page
-- **THEN** `/check` shows a verdict with judgment rules unconfirmed and a note that the thesis could not be read
+- **THEN** `/why` shows a verdict with judgment rules unconfirmed and a note that the thesis could not be read

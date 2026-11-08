@@ -111,7 +111,8 @@ class Store:
         ]
 
     def holding(self, sec: Security) -> Holding | None:
-        return next((h for h in self.holdings() if h.sec == sec), None)
+        """Matched on symbol and market, the table's key: a lookup may spell the company name differently."""
+        return next((h for h in self.holdings() if (h.sec.symbol, h.sec.market) == (sec.symbol, sec.market)), None)
 
     # --- the locked conviction blueprint (every version is kept) ---
     def lock_blueprint(self, bp: Blueprint) -> int:

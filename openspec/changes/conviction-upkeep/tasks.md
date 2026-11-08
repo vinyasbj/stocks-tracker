@@ -12,7 +12,7 @@
 - [ ] 2.2 Mark bot-composed lines with "🤖"; verify in the review-line and entry-line renderer tests
 - [ ] 2.3 Entry snapshots: after each sync, write one ENTRY line for portfolio stocks not yet in `seen_items` scope `entry:portfolio`, with the first ever pass recording a baseline only; verify tests for deploy-with-12-holdings (no writes), a new holding (one write), wishlist → portfolio (one write), and a second sync (no write)
 - [ ] 2.4 `/log` command and CLI `log`: parse, resolve via `pick()`, require a page, and append to DECISION LOG with the date and currency symbol; verify parser tests (valid, lowercase action, ₹ and $ prices, wrong form) and a handler test that the wrong form writes nothing and replies with usage
-- [ ] 2.5 Start-thesis button (`st|SYMBOL|MARKET`) on `/check` for stocks without a page: re-sync and re-check, then build properties from the wishlist data source schema and children from `templates/thesis.md` plus the locked blueprint's tick boxes, create the page, sync, and reply with the link; verify with a mocked-Notion test that a double tap creates one row, and a manual run in Telegram
+- [ ] 2.5 Start-thesis button (`st|SYMBOL|MARKET`) on `/why` for stocks without a page: re-sync and re-check, then build properties from the wishlist data source schema and children from `templates/thesis.md` plus the locked blueprint's tick boxes, create the page, sync, and reply with the link; verify with a mocked-Notion test that a double tap creates one row, and a manual run in Telegram
 - [ ] 2.6 Update the README: enabling *Insert content*, what the bot writes and where, the 🤖 mark, `/log` syntax, and the Start-thesis button; verify that the README `/log` example parses with the task 2.4 parser
 
 ## 3. Thesis tracking
@@ -21,9 +21,9 @@
 - [ ] 3.2 Evaluate pillars (met / not met / no data) and breakers (hit / clear / no data); verify with unit tests
 - [ ] 3.3 Add the Net cash metric (`totalCash`, `totalDebt` in `INFO_FIELDS`; `net_cash` in `metrics.compute()`; registry unit `money`, not for financials); verify a metrics test and blueprint-rule tests for the cash-rich and bank scenarios
 - [ ] 3.4 Add `breakers_hit` to `decide()` with REVIEW right after SELL; verify the new scenarios in the modified `conviction-verdict` spec (breaker alone → REVIEW, breaker plus must-fail → SELL, possible-only → unchanged)
-- [ ] 3.5 Add the `TRACKING_SYSTEM` prompt and structured schema; gather results filings and news since the last review (the last 90 days for `/check`); breakers with `challenges` are shown as possible; model unavailable gives "not checked"; verify with a stubbed LLM that statuses map correctly and the verdict is untouched
+- [ ] 3.5 Add the `TRACKING_SYSTEM` prompt and structured schema; gather results filings and news since the last review (the last 90 days for `/why`); breakers with `challenges` are shown as possible; model unavailable gives "not checked"; verify with a stubbed LLM that statuses map correctly and the verdict is untouched
 - [ ] 3.6 Parse action-plan triggers (add below, trim above price, trim above weight %; placeholders ignored); verify with tests including "Add below ₹/$ X"
-- [ ] 3.7 Show tracking in `/check`: pillar statuses, breaker statuses (hit / clear / possible / no data), and action-plan levels beside the current price or weight; verify with a renderer snapshot test
+- [ ] 3.7 Show tracking in `/why`: pillar statuses, breaker statuses (hit / clear / possible / no data), and action-plan levels beside the current price or weight; verify with a renderer snapshot test
 
 ## 4. Reviews, verdict history and alerts
 
@@ -38,4 +38,4 @@
 ## 5. Integration check
 
 - [ ] 5.1 Run `venv/bin/python -m pytest` and verify that all tests pass
-- [ ] 5.2 End-to-end on the real workspace with *Insert content* enabled: `/log` a decision, Start a thesis for a new stock, add a stock to the portfolio (entry line appears), force a review by clearing that stock's `stock_reviews` row (a line under REVIEW LOG), set a breaker `track: P/E > 1` (REVIEW and an alert), and run `/digest` with an add-below price above the current price (Conviction section); then remove *Insert content* and verify one warning while `/check` keeps working
+- [ ] 5.2 End-to-end on the real workspace with *Insert content* enabled: `/log` a decision, Start a thesis for a new stock, add a stock to the portfolio (entry line appears), force a review by clearing that stock's `stock_reviews` row (a line under REVIEW LOG), set a breaker `track: P/E > 1` (REVIEW and an alert), and run `/digest` with an add-below price above the current price (Conviction section); then remove *Insert content* and verify one warning while `/why` keeps working

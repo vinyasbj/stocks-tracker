@@ -58,15 +58,15 @@ Parsing is deliberately tolerant on *form*, so that CSV-imported text columns, c
 *Alternative*: a separate "Theses" database linked by relation. Rejected: one more database to share and keep in sync, when the investor already has one row per stock.
 
 ### 6. The model explains, it does not decide
-A new `CONVICTION_SYSTEM` prompt receives the existing `report.data_block()`, plus the rule results, the verdict line and the thesis text. It asks for 4–6 sentences: what passes clearly, what fails or can't be checked and why it matters, whether recent results and news support or challenge the thesis, and what to watch. It must restate the verdict and never change it. The grounding text is split, so this prompt keeps "use only DATA" and "plain text" but drops "do not tell the user to buy or sell"; that sentence stays in every other prompt.
+A new `CONVICTION_SYSTEM` prompt receives the existing `report.data_block()`, plus the rule results, the verdict line and the thesis text. It asks for 2–3 sentences: what failed or couldn't be checked and why it matters (not the rules that pass, which are shown above), whether recent results and news support or challenge the verdict, and one thing to watch. It mentions a thesis only when there is one. It must not repeat or change the verdict, which is shown above it. A 7B model overruns sentence limits, so the code also keeps only the first three sentences. The grounding text is split, so this prompt keeps "use only DATA" and "plain text" but drops "do not tell the user to buy or sell"; that sentence stays in every other prompt.
 
-`/check` uses the existing send-then-edit pattern, so the verdict appears before the model finishes.
+`/why` uses the existing send-then-edit pattern, so the verdict appears before the model finishes.
 
 ### 7. Report: concurrent, model-free, split on lines
 The engine evaluates holdings with `asyncio.gather`, through `asyncio.to_thread`, limited by a semaphore of 4. Fundamentals are already cached for 6 hours in `market.fetch_fundamentals`, so repeated reports are fast. Each stock's failure is caught and becomes an "unavailable" line. Rendering produces whole lines, and a `split_messages(lines, limit=4000)` helper packs them into several messages. The existing `report.clip()` truncates, which the spec forbids here.
 
 ### 8. Commands, intent, CLI
-- Handlers: `/check` and `/why` map to a new action code `ck` through the existing `command()` and `pick()`; buttons reuse the `ck|SYMBOL|MARKET` callback. `/report` and `/blueprint [lock]` are plain handlers. All are added to `COMMANDS` and `HELP`.
+- Handlers: `/why` maps to a new action code `ck` through the existing `command()` and `pick()`; buttons reuse the `ck|SYMBOL|MARKET` callback. `/report` and `/blueprint [lock]` are plain handlers. All are added to `COMMANDS` and `HELP`.
 - `Intent.intent` gains `"check"`. `INTENT_SYSTEM` describes it as buy/sell/hold/add questions, fit with "my rules / blueprint / conviction", and "why do I own …". `on_text` dispatches it to the check.
 - The CLI gains `check`, `why`, `report`, `blueprint [lock]`.
 
@@ -76,12 +76,12 @@ The engine evaluates holdings with `asyncio.gather`, through `asyncio.to_thread`
 | `analysis/blueprint.py` | metric registry, `Rule`, Notion row parsing, fingerprint, diff |
 | `analysis/verdict.py` | `Check`, `evaluate`, `Verdict`, `decide` |
 | `analysis/thesis.py` | blocks → `Thesis` |
-| `analysis/conviction.py` | Telegram rendering for `/check`, `/report`, `/blueprint` |
+| `analysis/conviction.py` | Telegram rendering for `/why`, `/report`, `/blueprint` |
 | `engine.py` | `blueprint_status()`, `lock_blueprint()`, `conviction(sec)`, `business_profile(sec, research)`, `conviction_report()` |
 
-### 10. Business profile in `/check`
+### 10. Business profile in `/why`
 - **Source**: Yahoo's `longBusinessSummary` and `country`, added to `INFO_FIELDS` as `business_summary` and `country`, and cached with the fundamentals. Checked live: GOOGL's description names its segments and regions; TCS's lists platforms and services. yfinance exposes **no segment or geographic revenue/profit numbers**, so the profile never shows a split and says so.
-- **How and where**: a `PROFILE_SYSTEM` prompt condenses the description into at most 3 lines (business lines or segments, customers, regions) and allows no numbers. *Guard*: if the output contains any digit sequence absent from the description, the bot uses the first ~300 characters of the description instead. The model's text is cached for 30 days under `profile:<market>:<symbol>:<hash of description>`, so only the first `/check` of a stock pays for this extra model call.
+- **How and where**: a `PROFILE_SYSTEM` prompt condenses the description into at most 3 lines (business lines or segments, customers, regions) and allows no numbers. *Guard*: if the output contains any digit sequence absent from the description, the bot uses the first ~300 characters of the description instead. The model's text is cached for 30 days under `profile:<market>:<symbol>:<hash of description>`, so only the first `/why` of a stock pays for this extra model call.
 - **Profit**: rendered by code from `metrics.compute()`: `q_net_income`, `ni_yoy`, `ni_qoq`, the latest annual `net_income`, `ni_cagr`, `net_margin`, `op_margin`. A negative latest quarter renders as "Loss-making: net loss …".
 - *Alternatives*: SEC XBRL segment facts (US only; the companyfacts API omits dimensional data) and Indian annual-report PDFs (no structured source). Both are out of scope; a later change could add them.
 

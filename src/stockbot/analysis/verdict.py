@@ -35,14 +35,25 @@ class Check:
         return f"{m.label} {self.note} (need {need})"
 
 
+TO_CONFIRM = "yours to confirm before buying"
+
+
 def evaluate(
-    rules: list[Rule], m: dict, f: dict, thesis: Thesis | None = None, no_thesis: str = "no thesis in Notion"
+    rules: list[Rule], m: dict, f: dict, thesis: Thesis | None = None, no_thesis: str = "no thesis in Notion",
+    held: bool = True,
 ) -> list[Check]:
-    """`m` is metrics.compute() output, `f` the fundamentals. `no_thesis` explains a missing thesis."""
+    """`m` is metrics.compute() output, `f` the fundamentals. `no_thesis` explains a missing thesis.
+
+    A stock you don't own has no thesis to tick, so its judgment rules don't count for or against it:
+    they are left for you to confirm before buying, and the BUY reason says so.
+    """
     fin = signals.is_financial(f)
     stale = bool(m.get("quarter_stale"))
     out = []
     for r in rules:
+        if r.is_judgment and not held:
+            out.append(Check(r, "na", note=TO_CONFIRM))
+            continue
         if r.is_judgment:
             ans = thesis.answer(r.text) if thesis else None
             if ans:
@@ -107,8 +118,43 @@ class Verdict:
 
 
 def _names(checks: list[Check], limit: int = 3) -> str:
-    more = f" +{len(checks) - limit} more" if len(checks) > limit else ""
-    return "; ".join(c.short() for c in checks[:limit]) + more
+    """Up to `limit` rules by name; two or more judgment rules are counted, not spelled out."""
+    judged = [c for c in checks if c.rule.is_judgment]
+    names = [c.short() for c in checks if not c.rule.is_judgment or len(judged) == 1]
+    if len(judged) > 1:
+        names.append(f"{len(judged)} judgment rules")
+    more = f" +{len(names) - limit} more" if len(names) > limit else ""
+    return "; ".join(names[:limit]) + more
+
+
+@dataclass
+class Breakdown:
+    """The checks grouped the way the verdict reads them."""
+    must_fail: list[Check]  # must-pass rules outside Valuation that fail
+    must_unknown: list[Check]  # ... that can't be confirmed
+    scored: list[Check]  # the other rules outside Valuation with a result
+    value_fail: list[Check]
+    value_unknown: list[Check]
+
+    @property
+    def passed(self) -> int:
+        return sum(c.status == "pass" for c in self.scored)
+
+    @property
+    def scored_fails(self) -> list[Check]:
+        return [c for c in self.scored if c.status == "fail"]
+
+
+def breakdown(checks: list[Check]) -> Breakdown:
+    core = [c for c in checks if c.rule.pillar != VALUATION and c.status != "na"]
+    value = [c for c in checks if c.rule.pillar == VALUATION and c.status != "na"]
+    return Breakdown(
+        [c for c in core if c.rule.must and c.status == "fail"],
+        [c for c in core if c.rule.must and c.status == "unknown"],
+        [c for c in core if not c.rule.must and c.status in ("pass", "fail")],
+        [c for c in value if c.status == "fail"],
+        [c for c in value if c.status == "unknown"],
+    )
 
 
 def decide(checks: list[Check], held: bool, pass_bar: float) -> Verdict:
@@ -117,17 +163,12 @@ def decide(checks: list[Check], held: bool, pass_bar: float) -> Verdict:
     Buying needs every must-pass rule confirmed; selling needs a must-pass rule actually failing, so an
     unknown never causes SELL or REVIEW. Valuation rules only decide whether the price is right.
     """
-    core = [c for c in checks if c.rule.pillar != VALUATION and c.status != "na"]
-    value = [c for c in checks if c.rule.pillar == VALUATION and c.status != "na"]
-    must_fail = [c for c in core if c.rule.must and c.status == "fail"]
-    must_unknown = [c for c in core if c.rule.must and c.status == "unknown"]
-    scored = [c for c in core if not c.rule.must and c.status in ("pass", "fail")]
-    passed = sum(c.status == "pass" for c in scored)
+    b = breakdown(checks)
+    must_fail, must_unknown, scored = b.must_fail, b.must_unknown, b.scored
+    passed, scored_fails = b.passed, b.scored_fails
+    value_fail, value_unknown = b.value_fail, b.value_unknown
     below_bar = bool(scored) and passed / len(scored) * 100 < pass_bar
     score = f"passes only {passed} of {len(scored)} scored rules (needs {pass_bar:g}%)"
-    scored_fails = [c for c in scored if c.status == "fail"]
-    value_fail = [c for c in value if c.status == "fail"]
-    value_unknown = [c for c in value if c.status == "unknown"]
 
     def v(code: str, reason: str, brief: str) -> Verdict:
         return Verdict(code, reason, checks, held, brief)
@@ -155,6 +196,10 @@ def decide(checks: list[Check], held: bool, pass_bar: float) -> Verdict:
         return v("WATCH", f"Good business by your rules, but the price fails: {_names(value_fail)}", _names(value_fail))
     if value_unknown:
         return v("WATCH", f"Business fits, but valuation can't be checked: {_names(value_unknown)}", _names(value_unknown))
+    to_confirm = [c for c in checks if c.rule.is_judgment and c.status == "na"]
+    if to_confirm:
+        n = "1 judgment rule" if len(to_confirm) == 1 else f"{len(to_confirm)} judgment rules"
+        return v("BUY", f"Numbers pass every rule, valuation included; before buying, confirm {n}", f"confirm {n}")
     return v("BUY", everything, "passes every rule")
 
 

@@ -7,7 +7,7 @@ A personal Telegram bot for Indian (NSE) and US stocks. It runs on your laptop w
 - **`/news TICKER`**: the latest exchange or SEC filings and news, each tagged 🟢 positive, 🔴 negative or ⚪ neutral.
 - **Alerts for your Notion portfolio 💼 and wishlist ⭐ only**: every 15 minutes the bot re-reads both Notion databases and checks those stocks for new filings, important news, and SEBI, RBI or SEC releases that affect them. To start or stop tracking a stock, add or remove it in Notion.
 - **`/portfolio`**: each holding's value, day change and unrealised P&L, with totals per currency (INR and USD, not converted), plus wishlist prices and distance from the 52-week high. The same view arrives with headlines as a digest each morning at 08:30 IST (**`/digest`**).
-- **`/check TICKER`** (or **`/why TICKER`**): any listed stock judged by **your own conviction blueprint**: a verdict, every rule's result, how and where the company makes its money with its profit figures, and your written thesis. See [Conviction blueprint](#conviction-blueprint).
+- **`/why TICKER`**: any listed stock judged by **your own conviction blueprint**: a verdict, every rule's result, how and where the company makes its money with its profit figures, and your written thesis. See [Conviction blueprint](#conviction-blueprint).
 - **`/report`**: every stock in your Notion portfolio judged by your blueprint, most urgent first.
 - **`/sync`**: re-reads Notion now and reports what was added or removed, and any rows the bot can't match to a listed stock.
 - `/analyze`, `/results`, `/news` and free-text questions work for **any** listed stock, so you can research a stock before adding it to the wishlist.
@@ -52,9 +52,9 @@ Your blueprint is your own fixed set of investing rules. Every stock is judged b
 
 1. In Notion, import [templates/blueprint.csv](templates/blueprint.csv) as a new database (**Import → CSV**). It has 15 starter rules; edit them to match how you invest. Each row has these columns:
    - **Rule**: the rule in your words.
-   - **Pillar**: Business, Quality, Growth, Safety or Valuation.
+   - **Pillar**: Business, Quality, Growth, Safety or Valuation (any other value is reported and the row skipped).
    - **Metric**: one of ROE, Net margin, Operating margin, Debt/Equity, Current ratio, P/E, Forward P/E, P/B, Revenue growth YoY, Profit growth YoY, Revenue CAGR 3Y, Profit CAGR 3Y, FCF positive years, Consecutive loss years, Dividend yield or From 52w high. Leave it empty (or write *Judgment*) for a rule you answer yourself, such as *"I understand how the company makes money"*.
-   - **Condition** (≥ or ≤) and **Threshold**: write plain numbers, so 15 means 15%. Don't use Notion's percent format, which stores 0.15.
+   - **Condition** (≥ or ≤; `>`, `<`, *above* and *below* are reported, not guessed) and **Threshold**: write plain numbers, so 15 means 15%. Don't use Notion's percent format, which stores 0.15.
    - **Must pass**: Yes for a deal-breaker.
    - The **Settings** row *"Scored rules pass bar"* (75 to start) is the share of the other rules a stock must pass.
 2. Share the database with your integration (**⋯ → Connections**) and put its link in `.env` as `NOTION_BLUEPRINT_DB`. Restart the bot.
@@ -68,7 +68,7 @@ The starter blueprint includes the rule *"Profit-making: not loss-making in each
 
 Open the stock's row in your Notion **portfolio** and paste [templates/thesis.md](templates/thesis.md) into the page. It has your one-line thesis, why you own it, entry, risks, thesis breakers, action plan, review log and decision log. It ends with **Blueprint checks**: one tick box per judgment rule. Tick only what is true for that stock. `/blueprint` prints the current tick-box block to paste. Put `Conviction: HIGH`, `MEDIUM` or `LOW` on the first line, or in a *Conviction* column.
 
-The wishlist is not used for convictions. A stock you don't own has no thesis, and `/check` still judges it.
+The wishlist is not used for convictions. A stock you don't own has no thesis, and `/why` still judges it.
 
 ### Verdicts
 
@@ -78,13 +78,13 @@ Code decides the verdict from your rules; the local model only explains it.
 |---|---|---|
 | A must-pass rule fails | **AVOID** | **SELL** |
 | Fewer than 75% of the other rules pass | **AVOID** | **REVIEW** |
-| A must-pass rule can't be confirmed (an unticked box, or no data) | **WATCH** | **HOLD**, "confirm …" |
+| A must-pass rule can't be confirmed (an unticked box, or no data) | **WATCH** (no data only) | **HOLD**, "confirm …" |
 | A Valuation rule fails (good business, wrong price) | **WATCH** | **HOLD**, "too expensive to add" |
-| Everything passes | **BUY** | **ADD** |
+| Everything passes | **BUY**, "before buying, confirm N judgment rules" | **ADD** |
 
-Missing data never causes SELL or REVIEW. Debt/Equity, Current ratio and FCF years don't apply to banks and other financials. If your conviction level disagrees with the verdict (HIGH but SELL, or LOW but ADD), the bot points it out.
+Judgment rules (the tick boxes) only count for stocks you own: a stock you don't own has no thesis to tick, so it is judged on the numbers, and a BUY reminds you to confirm the judgment rules yourself before buying. Missing data never causes SELL or REVIEW. Debt/Equity, Current ratio and FCF years don't apply to banks and other financials. If your conviction level disagrees with the verdict (HIGH but SELL, or LOW but ADD), the bot points it out.
 
-`/check` also shows **how and where the company makes money**, summarised from Yahoo's company description, and its **profit figures**: the latest quarter's net profit with YoY and QoQ growth, the latest full year, 3-year profit CAGR, and net and operating margin. Yahoo has no split of profit by segment or country, so the bot says so rather than estimating one.
+`/why` also shows **how and where the company makes money**, summarised from Yahoo's company description, and its **profit figures**: the latest quarter's net profit with YoY and QoQ growth, the latest full year, 3-year profit CAGR, and net and operating margin. A change in a loss is said in words ("loss widened 97%", "swung to a loss"). Yahoo has no split of profit by segment or country, so the bot never estimates one.
 
 ## Try it without Telegram
 
@@ -97,7 +97,7 @@ PYTHONPATH=src venv/bin/python -m stockbot.cli sync         # what the bot reads
 PYTHONPATH=src venv/bin/python -m stockbot.cli portfolio    # P&L
 PYTHONPATH=src venv/bin/python -m stockbot.cli monitor      # one alert pass (the first only records a baseline)
 PYTHONPATH=src venv/bin/python -m stockbot.cli blueprint    # your blueprint; add "lock" to lock it
-PYTHONPATH=src venv/bin/python -m stockbot.cli check TCS    # TCS judged by your blueprint
+PYTHONPATH=src venv/bin/python -m stockbot.cli why TCS      # TCS judged by your blueprint
 PYTHONPATH=src venv/bin/python -m stockbot.cli report       # your portfolio judged by your blueprint
 venv/bin/python -m pytest
 ```
@@ -105,6 +105,8 @@ venv/bin/python -m pytest
 ## Tickers
 
 Use an NSE symbol (`RELIANCE`, `INFY.NS`), a US ticker (`AAPL`, `BRK.B`), or a company name. When a name matches more than one stock, for example an NSE company and its US ADR, the bot shows buttons so you can pick one. You can also add a prefix: `NSE:infosys`, `US:infy`.
+
+ETFs and funds (`QQQM`, `SOXX`, `NIFTYBEES.NS`) aren't in the exchange lists, so type their exact ticker. `/why` shows a fund's figures (assets, expense ratio, yield, returns, 52-week range), what it holds and your thesis, but gives no verdict: your blueprint's rules are for companies. `/report` lists funds as not judged.
 
 ## Notion matching rules
 
@@ -119,4 +121,4 @@ Use an NSE symbol (`RELIANCE`, `INFY.NS`), a US ticker (`AAPL`, `BRK.B`), or a c
 - Yahoo sometimes stops updating a company's quarterly statements (HDFC Bank's stop at Jun 2025). The bot detects this, says so, and leaves those quarters out of the strengths and weaknesses rules. Use `/news` for the latest results.
 - BSE's API blocks scripted clients, so Indian filings come from NSE only.
 - On a 16 GB Mac, `qwen2.5:7b` takes about 10–30 s per reply. To try another model, set `OLLAMA_MODEL`, for example to `qwen3:8b` or `llama3.1`.
-- The bot does not give investment advice. `/check` and `/report` verdicts apply the rules **you** wrote in your blueprint; they are not the bot's recommendation.
+- The bot does not give investment advice. `/why` and `/report` verdicts apply the rules **you** wrote in your blueprint; they are not the bot's recommendation.

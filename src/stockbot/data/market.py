@@ -11,6 +11,7 @@ FUNDAMENTALS_TTL = 6 * 3600
 
 INFO_FIELDS = {
     "longName": "name",
+    "quoteType": "quote_type",  # EQUITY, ETF, MUTUALFUND
     "sector": "sector",
     "industry": "industry",
     "longBusinessSummary": "business_summary",  # what the company does, its segments and regions (text)
@@ -36,10 +37,20 @@ INFO_FIELDS = {
     # Yahoo's own YoY growth for its most recent quarter; used when the statements skip a quarter.
     "revenueGrowth": "revenue_growth_yoy",
     "earningsGrowth": "earnings_growth_yoy",
+    # ETFs and funds. Yahoo mixes units: the expense ratio and YTD return are already percentages,
+    # the 3y/5y average returns and the yield are fractions.
+    "category": "category",
+    "fundFamily": "fund_family",
+    "totalAssets": "total_assets",
+    "netExpenseRatio": "expense_ratio_pct",
+    "ytdReturn": "ytd_return_pct",
+    "threeYearAverageReturn": "return_3y",
+    "fiveYearAverageReturn": "return_5y",
+    "yield": "fund_yield",
 }
 
 
-TEXT_FIELDS = {"name", "sector", "industry", "currency", "financial_currency", "business_summary", "country"}
+TEXT_FIELDS = {"name", "quote_type", "category", "fund_family", "sector", "industry", "currency", "financial_currency", "business_summary", "country"}
 
 
 def _num(v):
@@ -119,7 +130,10 @@ def fetch_quote(sec: Security) -> dict:
 LISTED_TYPES = ("EQUITY", "ETF", "MUTUALFUND")
 
 
-def lookup_symbol(symbol: str, market: str | None) -> Security | None:
+FUND_TYPES = ("ETF", "MUTUALFUND")
+
+
+def lookup_symbol(symbol: str, market: str | None, types: tuple[str, ...] = LISTED_TYPES) -> Security | None:
     """Exact ticker lookup on Yahoo, for listings the NSE and SEC lists leave out (ETFs).
 
     Never fuzzy: the symbol must exist as typed.
@@ -134,6 +148,6 @@ def lookup_symbol(symbol: str, market: str | None) -> Security | None:
         except Exception:
             continue
         price = info.get("regularMarketPrice") or info.get("currentPrice") or info.get("navPrice")
-        if info.get("quoteType") in LISTED_TYPES and price:
+        if info.get("quoteType") in types and price:
             return Security(sym, mkt, info.get("longName") or info.get("shortName") or sym)
     return None

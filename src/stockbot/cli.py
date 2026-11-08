@@ -8,7 +8,7 @@
     python -m stockbot.cli portfolio   # P&L and wishlist prices
     python -m stockbot.cli digest      # the daily digest
     python -m stockbot.cli monitor     # sync, then one alert pass (alerts print here)
-    python -m stockbot.cli check TCS   # judged by your conviction blueprint (also: why)
+    python -m stockbot.cli why TCS     # judged by your conviction blueprint
     python -m stockbot.cli report      # every portfolio holding judged by your blueprint
     python -m stockbot.cli blueprint [lock]
 """
@@ -72,13 +72,14 @@ async def main(argv: list[str]) -> None:
         for row, why in rep.unmatched:
             print(f"!! {row.list_type:9} {row.label}: {why}")
         print(f"added {[x.symbol for x in rep.added]} removed {[x.symbol for x in rep.removed]}")
-    elif cmd in ("check", "why"):
+    elif cmd == "why":
         sec = await one(eng, " ".join(args))
         c = await eng.conviction(sec)
         if c is None:
             sys.exit(plain(cv.SETUP))
         profile = await eng.business_profile(sec, c.research)
-        print(plain(cv.render_check(c, profile, await eng.conviction_summary(c))))
+        summary = None if c.fund else await eng.conviction_summary(c)
+        print(plain(cv.render_check(c, profile, summary)))
     elif cmd == "report":
         if eng.store.locked_blueprint() is None:
             sys.exit(plain(cv.SETUP))

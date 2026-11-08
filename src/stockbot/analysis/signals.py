@@ -16,6 +16,15 @@ def is_financial(fundamentals: dict) -> bool:
     return "financial" in sector or any(w in industry for w in ("bank", "credit", "insurance", "capital markets"))
 
 
+def is_fund(fundamentals: dict) -> bool:
+    """ETFs and mutual funds: company rules (ROE, debt, profit) don't apply to them."""
+    kind = fundamentals.get("quote_type")
+    if kind:
+        return kind.upper() in ("ETF", "MUTUALFUND")
+    # Fundamentals cached before quote_type was kept: a fund has no sector and no annual statements.
+    return not fundamentals.get("sector") and not fundamentals.get("annual")
+
+
 def bands(m: dict, fundamentals: dict) -> dict[str, str]:
     """Plain-word grades for the ratios, so the LLM does not have to judge thresholds itself."""
     fin = is_financial(fundamentals)

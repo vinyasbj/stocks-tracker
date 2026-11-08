@@ -2,7 +2,7 @@
 
 ## Why
 
-`conviction-blueprint` lets the investor judge any stock on demand, but a thesis only stays useful if someone keeps it up to date. Today the investor would have to notice each quarter's results, re-run `/check`, copy the outcome into the stock's review log, and remember their own sell triggers and price levels. This change makes the bot do that upkeep. It writes into the investor's Notion pages, append-only, and speaks up only when something changes.
+`conviction-blueprint` lets the investor judge any stock on demand, but a thesis only stays useful if someone keeps it up to date. Today the investor would have to notice each quarter's results, re-run `/why`, copy the outcome into the stock's review log, and remember their own sell triggers and price levels. This change makes the bot do that upkeep. It writes into the investor's Notion pages, append-only, and speaks up only when something changes.
 
 ## What Changes
 
@@ -12,7 +12,7 @@
 - **Thesis tracking**: `track:` lines on pillars and thesis breakers that use a metric the bot knows are checked against the data. A breaker that is hit raises a held stock to **REVIEW** (a failing must-pass blueprint rule still means SELL). Lines the bot can't check, such as segment numbers like "Search revenue", are read against new results filings and news by the local model. They are reported as *possible* breakers with evidence, and never change the verdict.
 - **Action-plan triggers in the digest**: "add below ₹X / $X", "trim above ₹X / $X", and "trim if it grows past N% of my portfolio" are checked daily. Portfolio weight uses a USD/INR rate so INR and USD holdings can be added together.
 - **Entry and decision log**: when a stock first appears in the portfolio, the bot appends an entry snapshot (date, price, P/E, verdict, blueprint version). A new `/log TICKER BUY|ADD|TRIM|SELL QTY @ PRICE reason` command appends a dated line to the DECISION LOG.
-- **Start a thesis**: for a stock with no Notion row, `/check` offers a button that creates a wishlist row pre-filled with the thesis template and the locked blueprint's tick boxes.
+- **Start a thesis**: for a stock with no Notion row, `/why` offers a button that creates a wishlist row pre-filled with the thesis template and the locked blueprint's tick boxes.
 - New metric **Net cash** (cash minus total debt) for `track:` lines and blueprint rules.
 - Step one is a spike that confirms Notion's API can insert a block *after a given block*, at the API version the bot uses. The design has a fallback if it can't.
 

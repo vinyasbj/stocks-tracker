@@ -134,13 +134,16 @@ async def classify(llm: LLM, sec: Security, items: list[Item]) -> dict[str, Item
 
 def header(r: Research) -> str:
     f, m, cur = r.fundamentals, r.metrics, r.fundamentals.get("currency")
-    return (
-        f"<b>{escape(f.get('name') or r.sec.name)}</b> · {escape(r.sec.symbol)} "
-        f"({'NSE' if r.sec.market == 'IN' else 'US'})\n"
-        f"{fmt.price(f.get('price'), cur)} ({fmt.pct(m.get('day_change'))}) · "
-        f"Mcap {fmt.money(f.get('market_cap'), cur)} · P/E {round(f['pe'], 1) if f.get('pe') else 'n/a'}\n"
-        f"<i>{escape(f.get('sector') or '')}{' / ' + escape(f['industry']) if f.get('industry') else ''}</i>"
-    )
+    # ETFs and funds have no market cap and no sector: leave those out rather than print "n/a" or a blank line.
+    mcap = f" · Mcap {fmt.money(f.get('market_cap'), cur)}" if f.get("market_cap") or f.get("sector") else ""
+    lines = [
+        f"<b>{escape(f.get('name') or r.sec.name)}</b> · {escape(r.sec.symbol)} ({'NSE' if r.sec.market == 'IN' else 'US'})",
+        f"{fmt.price(f.get('price'), cur)} ({fmt.pct(m.get('day_change'))}){mcap} · "
+        f"P/E {round(f['pe'], 1) if f.get('pe') else 'n/a'}",
+    ]
+    if f.get("sector") or f.get("industry"):
+        lines.append(f"<i>{escape(f.get('sector') or '')}{' / ' + escape(f['industry']) if f.get('industry') else ''}</i>")
+    return "\n".join(lines)
 
 
 def quarter_lines(r: Research) -> str:

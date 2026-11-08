@@ -149,3 +149,26 @@ def test_starter_csv_parses_cleanly():
     assert (yoy.metric, yoy.op, yoy.threshold, yoy.must) == ("ni_yoy", ">=", 0, False)
     assert len(p.blueprint.judgment_rules) == 4
     assert sum(r.must for r in p.blueprint.rules) == 7
+
+
+def text_row(rule, pillar, metric="ROE", condition="≥", threshold="15"):
+    cell = lambda v: {"type": "rich_text", "rich_text": [{"plain_text": v}] if v else []}  # noqa: E731
+    return {"properties": {
+        "Rule": {"type": "title", "title": [{"plain_text": rule}]},
+        "Pillar": cell(pillar), "Metric": cell(metric), "Condition": cell(condition), "Threshold": cell(threshold),
+    }}
+
+
+def test_strict_conditions_are_reported_not_read_as_or_equal():
+    p = bp.parse_rules([text_row("ROE above 15", "Quality", condition=">"),
+                        text_row("P/E under 40", "Valuation", metric="P/E", condition="below", threshold="40")])
+    assert p.blueprint.rules == []
+    assert "ROE above 15: condition must be ≥ or ≤, not '>'" in p.problems
+    assert "P/E under 40: condition must be ≥ or ≤, not 'below'" in p.problems
+
+
+def test_unknown_or_missing_pillar_is_reported():
+    p = bp.parse_rules([text_row("ROE at least 15", "Qualty"), text_row("Moat", "", metric="")])
+    assert p.blueprint.rules == []
+    assert "ROE at least 15: pillar must be Business, Quality, Growth, Safety, Valuation or Settings, not 'Qualty'" in p.problems
+    assert any(x.startswith("Moat: pillar must be") for x in p.problems)
