@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Running the bot unattended on the investor's shared Oracle Cloud server: how it is started and kept running, where its settings and data live, how a new version reaches the server, how its data is backed up, and how it shares the local model with the expense-tracker bot.
+Running the bot unattended on the investor's shared Oracle Cloud server: how it is started and kept running, where its settings and data live, how a new version reaches the server, how its data is backed up to the investor's laptop, and how it shares the local model with the expense-tracker bot.
 
 ## ADDED Requirements
 
@@ -152,20 +152,20 @@ The image and CI SHALL install the same fully pinned dependency versions, genera
 - **WHEN** CI and the server build from the same commit
 - **THEN** both install identical package versions, and the runtime image has no pytest
 
-### Requirement: The database is backed up nightly
-A nightly job on the server SHALL save a consistent snapshot of the bot's database outside the volume, keep the last 30 days on the VM, and upload each snapshot to storage outside the VM. The upload credential SHALL allow writing only. The README SHALL describe how to restore a snapshot from either place.
+### Requirement: The database is backed up daily to the investor's laptop
+A scheduled job on the investor's laptop SHALL pull a consistent snapshot of the bot's database from the running container over ssh, verify that the downloaded copy passes SQLite's integrity check, save it as a dated file on the laptop, and delete snapshots older than 30 days. The server SHALL keep no backup and no leftover temporary file. The README SHALL describe how to restore a snapshot onto the server.
 
-#### Scenario: Nightly snapshot
-- **WHEN** the nightly job runs while the bot is running
-- **THEN** a dated, readable copy of the database is saved on the VM and uploaded off the VM, and local snapshots older than 30 days are deleted
+#### Scenario: Daily snapshot
+- **WHEN** the laptop job runs while the bot is running
+- **THEN** a dated, readable copy of the database is saved on the laptop, nothing is left on the VM, and local snapshots older than 30 days are deleted
 
-#### Scenario: Off-VM upload fails
-- **WHEN** the upload fails, for example because the network is down or the upload URL has expired
-- **THEN** the local snapshot is still kept, and the job exits non-zero and logs the failure
+#### Scenario: Server unreachable or copy corrupt
+- **WHEN** the ssh connection fails or the downloaded copy fails its check
+- **THEN** no new snapshot replaces an existing one, and the job exits non-zero and logs the failure
 
-#### Scenario: VM lost
-- **WHEN** the VM is gone
-- **THEN** the investor can restore the latest uploaded snapshot onto a new host by following the README
+#### Scenario: Laptop off
+- **WHEN** the laptop is asleep or off at the scheduled time
+- **THEN** the job runs when it wakes, and days with no run have no snapshot
 
 #### Scenario: Restore
 - **WHEN** the investor follows the README's restore steps with a snapshot

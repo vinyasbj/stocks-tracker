@@ -56,6 +56,7 @@
 - [x] 6.3 Run the "Apply settings" workflow once. Verify that the server `.env` has `OLLAMA_TIMEOUT` and `HEARTBEAT_URL` from the secrets, that `.env.bak` exists, and that `stock-bot` was recreated (new container start time) while `expense-bot` was not
   - Done 2026-11-11: the workflow ran green. Server `.env` has `OLLAMA_TIMEOUT=90`, model `qwen2.5:7b`, 15-minute polling and the 08:30 digest; `.env.bak` exists (mode 600) and holds the same values, so the secrets match what was already running. `stock-bot` was recreated (start 09:31 UTC, healthy, Notion tracking 30 stocks, 0 unmatched) and `expense-bot` was not (still up 5 days). `HEARTBEAT_URL` is not in `.env` (5.10 deferred). `NOTION_WISHLIST_DB` and `NOTION_WISHLIST_MARKET` are empty, as they were before
 - [ ] 6.4 Cost guard: confirm the tenancy's budget alert ($0.10) targets your email, and check Cost Analysis for the VM's compute line. Verify it shows $0 for the last full day; if not, see design Risks (resize to 2 OCPU / 12 GB, retune `OLLAMA_TIMEOUT`)
+  - Open at archive time (2026-11-11): the investor will check the OCI budget alert and Cost Analysis later; not verified by the assistant, which has no OCI access. Left unticked on purpose
 
 ## 7. Faster `/why` (D10, added after measuring on the VM)
 
@@ -63,7 +64,8 @@
 - [x] 7.2 Add `max_tokens` to `LLM.chat` (Ollama `num_predict`), drop the unfinished sentence of a reply that stopped at the cap, set `WHY_MAX_TOKENS = 150`, and ask for at most 70 words in `CONVICTION_SYSTEM`. Verify with tests of the cap, of the trimming (including "24.3%") and of a reply that finished by itself
 - [x] 7.3 Cache the explanation by the hash of model, system prompt and data (`WHY_TTL` 7 days); do not cache failures or empty replies. Verify with tests: a repeat is one model call, a price change alone still hits, a new headline misses, a failure is retried, a different model misses
 - [x] 7.4 Run the real prompts on the VM for five portfolio stocks (a not-held Indian stock failing two rules, held stocks with a thesis, loss-makers); an ETF (QQQM) makes no model call. Verify the times in 5.2 and that the text matches the verdict. One run misread the grouped "judgment rules" line, so the line now says they are not yet confirmed; NVDA then explained it correctly
-- [ ] 7.5 After go-live, ask `/why` for the same stock twice in Telegram and confirm the second answer is instant (`docker compose logs stock-bot` shows no model call), and that `/why` finishes under `OLLAMA_TIMEOUT`
+- [x] 7.5 After go-live, ask `/why` for the same stock twice in Telegram and confirm the second answer is instant (`docker compose logs stock-bot` shows no model call), and that `/why` finishes under `OLLAMA_TIMEOUT`
+  - Done 2026-11-11: the investor tested `/why` in Telegram on the server after go-live (reported as tested; timings not given)
 
 ## Workflow follow-up
 
