@@ -11,7 +11,7 @@ from typing import Awaitable, Callable
 from .alerts.monitor import Monitor
 from .analysis import blueprint, report, signals, thesis, verdict
 from .analysis.conviction import (
-    BlueprintStatus, Conviction, LockResult, Profile, ReportEntry, ReportResult, summary_data,
+    BlueprintStatus, Conviction, LockResult, Profile, ReportEntry, ReportResult, explain_data,
 )
 from .config import Settings
 from .data import market, notion, tickers
@@ -26,6 +26,8 @@ from .sync import SyncReport, build_holdings
 log = logging.getLogger(__name__)
 UNMATCHED_TTL = 30 * 24 * 3600
 PROFILE_TTL = 30 * 24 * 3600
+WHY_TTL = 7 * 24 * 3600
+WHY_MAX_TOKENS = 150  # about 100 words; the reply is cut to 3 sentences anyway, and writing costs ~6 tokens/s
 REPORT_CONCURRENCY = 4
 EXCERPT = 300
 Send = Callable[[int, str], Awaitable[None]]
@@ -314,12 +316,21 @@ class Engine:
         return profile
 
     async def conviction_summary(self, c: Conviction) -> str:
-        data = f"{report.data_block(c.research)}\n{summary_data(c)}"
+        """The model's explanation of the verdict. Cached by what the model would read, so asking again about
+        a stock whose rules, quarter and headlines haven't changed answers at once instead of in a minute."""
+        data = explain_data(c)
+        key = "why:" + hashlib.sha1(f"{self.settings.ollama_model}\n{CONVICTION_SYSTEM}\n{data}".encode()).hexdigest()[:16]
+        if (hit := self.store.cache_get(key)) is not None:
+            return hit
         try:
-            return first_sentences(plain_text(await self.llm.chat(
+            text = first_sentences(plain_text(await self.llm.chat(
                 [{"role": "system", "content": CONVICTION_SYSTEM},
-                 {"role": "user", "content": f"DATA:\n{data}\n\nExplain the verdict."}]
+                 {"role": "user", "content": f"DATA:\n{data}\n\nExplain the verdict."}],
+                max_tokens=WHY_MAX_TOKENS,
             )))
         except Exception as e:
             log.warning("LLM failed: %s", e)
             return f"(The local model is unavailable: {e}. Is `ollama serve` running?)"
+        if text:  # a failure or an empty reply is not kept: the next ask tries the model again
+            self.store.cache_set(key, text, WHY_TTL)
+        return text

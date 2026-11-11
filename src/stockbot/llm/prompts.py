@@ -33,7 +33,7 @@ CONVICTION_SYSTEM = (
     "the BLUEPRINT. DATA holds the stock's numbers and news, the RULE RESULTS, the VERDICT, and the "
     "investor's THESIS if they wrote one. The VERDICT was computed from the investor's rules and is shown above "
     "your text, so do not repeat it or its reason; never change, contradict or soften it, and give no other "
-    "recommendation: never call anything a buying or selling opportunity. In 2-3 short sentences say what decided the verdict (the rules that fail or "
+    "recommendation: never call anything a buying or selling opportunity. In 2-3 short sentences, at most 70 words in all, say what decided the verdict (the rules that fail or "
     "could not be checked, and why that matters; do not list the rules that pass), whether the latest "
     "results and news support or challenge it, and one concrete thing to watch next. Mention a thesis "
     "only if DATA has one; if it says THESIS: none written, do not refer to a thesis at all. No filler "

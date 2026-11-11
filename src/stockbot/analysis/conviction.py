@@ -8,7 +8,7 @@ from html import escape
 from ..models import Holding, Security
 from . import fmt, signals
 from .blueprint import METRICS, PILLARS, Blueprint, Diff, Locked, Parsed, Rule, fmt_value
-from .report import Research, header, statement_currency
+from .report import Research, change_line, header, prompt_item_line, quarter_line, stale_warning, statement_currency
 from .thesis import TITLES, Thesis
 from .verdict import HELD_ORDER, Check, Verdict, breakdown
 
@@ -352,18 +352,45 @@ def clip(html: str, limit: int) -> str:
     return html[: html.rfind("\n", 0, limit - 2)] + "\n…"
 
 
-def summary_data(c: Conviction) -> str:
-    """The extra DATA the model gets beside report.data_block(): rule results, verdict, thesis."""
-    v = c.verdict
-    lines = [f"BLUEPRINT v{c.locked.version} RULE RESULTS:"]
+EXPLAIN_NEWS = 5  # headlines the model reads: each costs about 30 tokens, and 12 mostly add noise
+
+
+def explain_data(c: Conviction) -> str:
+    """The DATA for the model's /why explanation. Short on purpose: the server reads about 20 tokens a second,
+    so reading time dominates. It holds what decides the verdict (failing and unchecked rules, the thesis), the
+    latest quarter and a few headlines. Passing rules are only counted, since the model is told not to list
+    them. There is no price or market cap, so the text, and its cache key, change only when something the
+    explanation can say changes."""
+    r, v, f, m = c.research, c.verdict, c.research.fundamentals, c.research.metrics
+    lines = [f"STOCK: {r.sec.label}", f"Sector: {f.get('sector') or 'n/a'} / {f.get('industry') or 'n/a'}"]
+    if m.get("quarter_stale"):
+        lines.append(stale_warning(m))
+    if quarters := f.get("quarterly"):
+        lines += ["Latest quarter:", quarter_line(quarters[0], statement_currency(f))]
+    lines.append(change_line(m))
+    if r.updates:
+        lines.append("Recent filings and news (newest first):")
+        lines.extend(prompt_item_line(it, 120) for it in r.updates[:EXPLAIN_NEWS])
+    passing = sum(ch.status == "pass" for ch in v.checks)
+    lines.append(f"BLUEPRINT v{c.locked.version} RULE RESULTS (the other {passing} rules pass; not listed):")
+    unchecked: dict[tuple[str, str], list[str]] = {}  # judgment rules share one note, so list them together
     for ch in v.checks:
-        lines.append(f"  [{ch.status.upper()}] {ch.rule.text} ({ch.rule.condition()}{', must pass' if ch.rule.must else ''}): {ch.note}")
+        if ch.status == "pass":
+            continue
+        if ch.rule.is_judgment and ch.status != "fail":
+            unchecked.setdefault((ch.status, ch.note), []).append(ch.rule.text + (" (must pass)" if ch.rule.must else ""))
+        else:
+            lines.append(
+                f"  [{ch.status.upper()}] {ch.rule.text} ({ch.rule.condition()}{', must pass' if ch.rule.must else ''}): {ch.note}"
+            )
+    for (status, note), texts in unchecked.items():
+        lines.append(f"  [{status.upper()}] {len(texts)} judgment rules NOT yet confirmed by the investor ({note}): " + "; ".join(texts))
     lines.append(f"VERDICT: {v.code} — {v.reason}")
     lines.append(f"The investor {'holds' if v.held else 'does not hold'} this stock.")
     if c.thesis and not c.thesis.empty:
         lines.append("THESIS (written by the investor):")
         for key in ("thesis", "pillars", "risks", "breakers", "plan"):
-            for x in c.thesis.lines(key)[:6]:
+            for x in c.thesis.lines(key)[:3]:
                 lines.append(f"  {TITLES[key]}: {_cut(x, 200)}")
     else:
         lines.append("THESIS: none written.")

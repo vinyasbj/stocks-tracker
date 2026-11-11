@@ -71,9 +71,11 @@ def thesis_blocks(ticked=True):
 class FakeLLM:
     def __init__(self, reply="Google Services sells ads.\nGoogle Cloud sells cloud services.", fail=False):
         self.reply, self.fail, self.calls = reply, fail, 0
+        self.last_messages = self.last_max_tokens = None
 
-    async def chat(self, messages, temperature=0.3):
+    async def chat(self, messages, temperature=0.3, max_tokens=None):
         self.calls += 1
+        self.last_messages, self.last_max_tokens = messages, max_tokens
         if self.fail:
             raise ConnectionError("ollama down")
         return self.reply
@@ -550,3 +552,160 @@ def test_why_shows_an_etf_without_judging_it(eng, monkeypatch):
                  "<b>🏢 What it holds</b>\nThe fund invests at least 90%", "Funds aren't judged by your blueprint"):
         assert part in html, part
     assert "VERDICT" not in html and "📏 Rules" not in html
+
+
+# --- /why: a short prompt, a capped reply, and a cache ---
+
+def slow_grower():
+    """Healthy business that grows about 5% a year: fails the two 3-year growth rules, passes the rest."""
+    return fundamentals(
+        name="Slow Corp",
+        annual=[{"period": f"{y}-12-31", "revenue": r, "net_income": n, "fcf": 20e9}
+                for y, r, n in ((2025, 100e9, 20e9), (2024, 95e9, 19e9), (2023, 90e9, 18e9), (2022, 86e9, 17e9))],
+    )
+
+
+SLOW = Security("SLOW", "US", "Slow Corp")
+STALE_DATA = fundamentals(quarterly=[q("2025-03-31", 90e9, 22e9, 26e9), q("2024-03-31", 80e9, 20e9, 24e9)])
+
+
+def news(n, summary=""):
+    from datetime import datetime
+
+    return [report.Item(f"k{i}", "filing" if summary else "news", f"Headline number {i}", "http://x", "Reuters",
+                        datetime(2026, 11, 10), summary) for i in range(n)]
+
+
+def explain(eng, monkeypatch, sec, data, updates=(), thesis=False):
+    run(eng.lock_blueprint())
+    if thesis:
+        eng.store.replace_holdings([Holding(sec, "portfolio", 10, 150, ("pg1",), "HIGH")])
+        eng.blocks["pg1"] = thesis_blocks()
+
+    def gather(s, *a, **k):
+        r = research(s, data=data)
+        r.updates = list(updates)
+        return r
+
+    monkeypatch.setattr(report, "gather", gather)
+    c = run(eng.conviction(sec))
+    return c, cv.explain_data(c)
+
+
+def test_explain_data_for_a_stock_failing_two_rules_lists_only_those_and_counts_the_rest(eng, monkeypatch):
+    c, data = explain(eng, monkeypatch, SLOW, slow_grower())
+    assert "[FAIL] Profit grew at least 10% a year over 3 years (Profit CAGR 3Y ≥ 10.0%): " in data
+    assert "[FAIL] Revenue grew at least 10% a year over 3 years" in data
+    assert f"(the other {c.verdict.passed} rules pass; not listed)" in data
+    assert "Return on equity at least 15%" not in data and "Debt/equity at most 1" not in data  # passing rules
+    assert "VERDICT: AVOID" in data and "The investor does not hold this stock." in data
+    assert "THESIS: none written." in data
+    assert data.count("judgment rules NOT yet confirmed") == 1 and "I understand how the company makes money (must pass)" in data
+    assert "Latest quarter:" in data and "Jun 2026" not in data  # only the newest quarter
+    assert "FY ending" not in data and "Price:" not in data and "Market cap" not in data
+
+
+def test_explain_data_for_a_held_stock_carries_the_thesis_in_short(eng, monkeypatch):
+    c, data = explain(eng, monkeypatch, GOOGL, fundamentals(), thesis=True)
+    assert "The investor holds this stock." in data and "VERDICT: HOLD" in data
+    assert "THESIS (written by the investor):" in data and "Search is still a cash machine" in data
+    for key in ("thesis", "pillars", "risks", "breakers", "plan"):
+        assert sum(ln.startswith(f"  {cv.TITLES[key]}:") for ln in data.splitlines()) <= 3
+
+
+def test_explain_data_for_a_loss_maker_shows_why_it_fails(eng, monkeypatch):
+    c, data = explain(eng, monkeypatch, JUNK, LOSS_MAKER)
+    assert "[FAIL]" in data and "VERDICT: AVOID" in data
+    assert "Return on equity at least 15%" in data  # failing, so it is listed
+
+
+def test_explain_data_keeps_the_out_of_date_warning(eng, monkeypatch):
+    c, data = explain(eng, monkeypatch, SLOW, STALE_DATA)
+    assert "WARNING: the latest quarter available is Mar 2025" in data
+
+
+def test_explain_data_reads_five_headlines_and_cuts_filing_text(eng, monkeypatch):
+    c, data = explain(eng, monkeypatch, SLOW, slow_grower(), updates=news(9, summary="x" * 400))
+    assert data.count("Headline number") == cv.EXPLAIN_NEWS == 5 and "Headline number 4" in data
+    assert "Headline number 5" not in data and "x" * 121 not in data and "x" * 120 in data
+
+
+def test_explain_data_stays_short_in_the_worst_case(eng, monkeypatch):
+    """About 4 characters a token and 20 tokens a second on the server: this is the bound on reading time."""
+    c, data = explain(eng, monkeypatch, GOOGL, fundamentals(), updates=news(12, summary="y" * 300), thesis=True)
+    assert len(data) < 2800
+
+
+def test_the_explanation_prompt_asks_for_a_short_reply_and_caps_it(eng, monkeypatch):
+    c, _ = explain(eng, monkeypatch, SLOW, slow_grower())
+    run(eng.conviction_summary(c))
+    from stockbot.engine import WHY_MAX_TOKENS
+
+    assert eng.llm.last_max_tokens == WHY_MAX_TOKENS == 150
+    assert "at most 70 words" in eng.llm.last_messages[0]["content"]
+
+
+def test_explanation_is_cached_by_what_the_model_reads(eng, monkeypatch):
+    c, _ = explain(eng, monkeypatch, SLOW, slow_grower(), updates=news(2))
+    first = run(eng.conviction_summary(c))
+    assert run(eng.conviction_summary(c)) == first and eng.llm.calls == 1
+    c, _ = explain(eng, monkeypatch, SLOW, {**slow_grower(), "price": 999.0}, updates=news(2))  # price isn't read
+    assert run(eng.conviction_summary(c)) == first and eng.llm.calls == 1
+    c, _ = explain(eng, monkeypatch, SLOW, slow_grower(), updates=news(3))  # a new headline is
+    run(eng.conviction_summary(c))
+    assert eng.llm.calls == 2
+
+
+def test_a_failed_or_empty_explanation_is_not_cached(eng, monkeypatch):
+    c, _ = explain(eng, monkeypatch, SLOW, slow_grower())
+    eng.llm = FakeLLM(fail=True)
+    assert run(eng.conviction_summary(c)).startswith("(The local model is unavailable")
+    eng.llm = FakeLLM("")
+    assert run(eng.conviction_summary(c)) == "" and eng.llm.calls == 1
+    eng.llm = FakeLLM("It fails the growth rules. Watch next quarter.")
+    assert run(eng.conviction_summary(c)) == "It fails the growth rules. Watch next quarter."
+    assert eng.llm.calls == 1  # the model was asked again: neither failure was kept
+    assert run(eng.conviction_summary(c)) and eng.llm.calls == 1  # now it is
+
+
+def test_the_cache_key_follows_the_model(eng, monkeypatch):
+    c, _ = explain(eng, monkeypatch, SLOW, slow_grower())
+    run(eng.conviction_summary(c))
+    eng.settings = make_settings(ollama_model="other", notion_blueprint_db=BLUEPRINT_DB)
+    run(eng.conviction_summary(c))
+    assert eng.llm.calls == 2
+
+
+# --- the reply cap (llm/client.py) ---
+
+@pytest.mark.parametrize("text, kept", [
+    ("ROE is 24.3% today. Revenue grew and", "ROE is 24.3% today."),
+    ("It fails. Profit fell 5.3%. Watch the next", "It fails. Profit fell 5.3%."),
+    ("Margins are 18.2", "Margins are 18.2"),  # no complete sentence: keep what there is
+    ('He said "it fails." Then', 'He said "it fails."'),
+])
+def test_a_reply_cut_by_the_cap_loses_only_its_unfinished_sentence(text, kept):
+    from stockbot.llm.client import drop_partial_sentence
+
+    assert drop_partial_sentence(text) == kept
+
+
+def test_llm_sends_the_cap_and_trims_only_a_capped_reply():
+    from stockbot.llm.client import LLM
+
+    sent = []
+
+    def client(content, done_reason):
+        async def chat(**kw):
+            sent.append(kw["options"])
+            return SimpleNamespace(message=SimpleNamespace(content=content), done_reason=done_reason)
+
+        return SimpleNamespace(chat=chat)
+
+    llm = LLM("http://x", "m", 8192)
+    llm.client = client("One. Two and", "length")
+    assert run(llm.chat([], max_tokens=150)) == "One." and sent[-1]["num_predict"] == 150
+    llm.client = client("One. Two and", "stop")  # finished by itself: leave it alone
+    assert run(llm.chat([], max_tokens=150)) == "One. Two and"
+    llm.client = client("One. Two and", "length")
+    assert run(llm.chat([])) == "One. Two and" and "num_predict" not in sent[-1]  # no cap, no trimming

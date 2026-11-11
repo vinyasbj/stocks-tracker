@@ -58,6 +58,34 @@ def statement_currency(f: dict) -> str | None:
 
 # --- LLM context ---
 
+def stale_warning(m: dict) -> str:
+    return (
+        f"  WARNING: the latest quarter available is {fmt.quarter_label(m['quarter'])}, which is out of date. "
+        "Say that the newest quarterly numbers are not available; rely on the news and filings for recent results."
+    )
+
+
+def quarter_line(q: dict, fcur: str | None) -> str:
+    return (
+        f"  {fmt.quarter_label(q['period'])}: revenue {fmt.money(q.get('revenue'), fcur)}, "
+        f"operating profit {fmt.money(q.get('operating_income'), fcur)}, "
+        f"net profit {fmt.money(q.get('net_income'), fcur)}, EPS {q.get('eps')}"
+    )
+
+
+def change_line(m: dict) -> str:
+    return (
+        f"Latest quarter change: revenue QoQ {fmt.pct(m.get('rev_qoq'))}, YoY {fmt.pct(m.get('rev_yoy'))}; "
+        f"net profit QoQ {fmt.pct(m.get('ni_qoq'))}, YoY {fmt.pct(m.get('ni_yoy'))}"
+    )
+
+
+def prompt_item_line(it: Item, summary_chars: int = 200) -> str:
+    when = it.published.strftime("%d %b %Y") if it.published else "date n/a"
+    extra = f" — {it.summary[:summary_chars]}" if it.summary and it.kind == "filing" else ""
+    return f"  [{when}] ({it.source}) {it.title}{extra}"
+
+
 def data_block(r: Research, max_items: int = 12) -> str:
     f, m, cur = r.fundamentals, r.metrics, r.fundamentals.get("currency")
     fcur = statement_currency(f)
@@ -75,20 +103,10 @@ def data_block(r: Research, max_items: int = 12) -> str:
         "Quarterly results (newest first):",
     ]
     if m.get("quarter_stale"):
-        lines.append(
-            f"  WARNING: the latest quarter available is {fmt.quarter_label(m['quarter'])}, which is out of date. "
-            "Say that the newest quarterly numbers are not available; rely on the news and filings for recent results."
-        )
+        lines.append(stale_warning(m))
     for q in (f.get("quarterly") or [])[:5]:
-        lines.append(
-            f"  {fmt.quarter_label(q['period'])}: revenue {fmt.money(q.get('revenue'), fcur)}, "
-            f"operating profit {fmt.money(q.get('operating_income'), fcur)}, "
-            f"net profit {fmt.money(q.get('net_income'), fcur)}, EPS {q.get('eps')}"
-        )
-    lines.append(
-        f"Latest quarter change: revenue QoQ {fmt.pct(m.get('rev_qoq'))}, YoY {fmt.pct(m.get('rev_yoy'))}; "
-        f"net profit QoQ {fmt.pct(m.get('ni_qoq'))}, YoY {fmt.pct(m.get('ni_yoy'))}"
-    )
+        lines.append(quarter_line(q, fcur))
+    lines.append(change_line(m))
     lines.append("Annual (fiscal year end, newest first):")
     annual = (f.get("annual") or [])[:4]
     for i, a in enumerate(annual):
@@ -104,10 +122,7 @@ def data_block(r: Research, max_items: int = 12) -> str:
     lines.append("Rule-based weaknesses: " + ("; ".join(s.text for s in r.signals if s.kind == "weakness") or "none"))
     if r.updates:
         lines.append("Recent filings and news (newest first):")
-        for it in r.updates[:max_items]:
-            when = it.published.strftime("%d %b %Y") if it.published else "date n/a"
-            extra = f" — {it.summary[:200]}" if it.summary and it.kind == "filing" else ""
-            lines.append(f"  [{when}] ({it.source}) {it.title}{extra}")
+        lines.extend(prompt_item_line(it) for it in r.updates[:max_items])
     return "\n".join(lines)
 
 

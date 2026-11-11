@@ -54,9 +54,41 @@ The bot SHALL send its model requests to the expense-tracker stack's Ollama inst
 - **WHEN** the expense-tracker stack is running with `qwen2.5:7b` pulled
 - **THEN** `/why` explanations and free-text answers are produced, and the server does not load a second copy of the model
 
+#### Scenario: No extra model
+- **WHEN** the bot answers any request
+- **THEN** it uses only the configured model (`qwen2.5:7b`), so the server's limit of three loaded models, which the expense-tracker stack's own three models already fill, is not exceeded
+
 #### Scenario: Shared Ollama down
 - **WHEN** the expense-tracker Ollama is not running
 - **THEN** the bot still starts and logs that Ollama is unreachable; data-only replies such as `/report` and `/portfolio` still work, and model-written parts fail with an error message instead of hanging the bot
+
+### Requirement: `/why` answers within a bounded time on the server's CPU
+The model's explanation of a verdict SHALL be built from a short prompt and a capped reply, so that it finishes well inside `OLLAMA_TIMEOUT` on the server's CPU-only model, and SHALL be reused while nothing it reads has changed. The verdict, the rule results and every number shown SHALL come from code, not from the model.
+
+#### Scenario: What the prompt holds
+- **WHEN** the explanation prompt is built
+- **THEN** it contains the rules that fail or could not be checked, the verdict, the investor's thesis, the latest quarter and at most five recent headlines
+- **AND** it only counts the rules that pass, and has no older quarters, annual tables or price
+
+#### Scenario: Capped reply
+- **WHEN** the model's reply reaches the limit of about 150 tokens
+- **THEN** the reply loses its unfinished sentence instead of ending mid-sentence
+
+#### Scenario: Fresh `/why` on the server
+- **WHEN** the investor asks `/why` for a stock whose explanation is not cached
+- **THEN** the verdict and rules appear at once, and the model's explanation is added within `OLLAMA_TIMEOUT` (measured on the VM: 28–53 s for `qwen2.5:7b`, against 132–139 s with the full data block)
+
+#### Scenario: Asked again
+- **WHEN** `/why` is asked again for a stock whose rules, latest quarter, headlines and thesis have not changed
+- **THEN** the earlier explanation is shown without calling the model, even if the price moved
+
+#### Scenario: Something the explanation reads changed
+- **WHEN** a new headline, a new quarter, a rule result, the thesis, the prompt wording or the model changes
+- **THEN** the model is asked again
+
+#### Scenario: Model fails
+- **WHEN** the model call fails or returns nothing
+- **THEN** the investor sees the existing error text or an empty summary, and nothing is cached, so the next `/why` asks the model again
 
 ### Requirement: Settings come from a server-side environment file, never the image
 The bot's secrets and settings SHALL be read from a `.env` file on the server that is excluded from git and from the image. The server-specific values (Ollama address, database path) SHALL be set by the deployment and SHALL override `.env`.

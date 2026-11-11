@@ -70,7 +70,7 @@ The bot runs in Docker on the Oracle Cloud VM, next to the expense-tracker stack
 ### First install (once)
 
 1. **Clone** the repo to `~/stock-bot` the same way `~/expense-tracker` was cloned (`git -C ~/expense-tracker remote -v` shows how).
-2. **Measure the model** on the server: run `docker exec -it expense-ollama ollama run qwen2.5:7b --verbose` and ask something short to warm it up, then paste a long prompt (a few pages of text). The *prompt eval rate* and *eval rate* lines give tokens per second. Set `OLLAMA_TIMEOUT` to the long prompt's total time plus 50%.
+2. **Measure the model** on the server: run `docker exec -it expense-ollama ollama run qwen2.5:7b --verbose` and ask something short to warm it up, then paste about 1,000 tokens of text (a `/why` prompt is 800–1,100). The *prompt eval rate* and *eval rate* lines give tokens per second; on the 4-core VM they were about 20 and 6. A `/why` there takes 28–53 s (the model reads the prompt at about 20 tokens/s, so the bot sends a short one and caps the reply), so `OLLAMA_TIMEOUT=90`. If your measurement differs, use the slowest `/why` time plus 50%.
 3. **Settings**: `cp .env.example .env`, fill it in as in [Setup](#setup-run-locally), then `chmod 600 .env`. Leave out `OLLAMA_URL` and `DB_PATH`: `docker-compose.yml` sets both.
 4. **Stop the laptop bot**: `launchctl unload ~/Library/LaunchAgents/com.stockbot.plist && rm ~/Library/LaunchAgents/com.stockbot.plist`.
 5. **Move the database**, so your locked blueprint keeps its version and old alerts aren't sent again:
@@ -136,7 +136,7 @@ docker compose start stock-bot
 
 The tenancy is Pay-As-You-Go. In June 2026 Oracle cut the Always Free Ampere A1 allowance from 4 OCPU / 24 GB to 2 OCPU / 12 GB, and it hasn't clearly said whether existing PAYG VMs above that stay free. Keep a small budget alert (**Billing & Cost Management → Budgets**), and check **Cost Analysis** grouped by SKU: the Ampere A1 lines should cost $0.00. Budgets only alert; they never stop spending.
 
-If charges appear, resize the VM rather than deleting it (**Compute → Instances → Edit → Edit shape**, 2 OCPU / 12 GB). A new VM may not be allowed above the free size. Both bots still fit, because they share one model, but replies take about twice as long, so raise `OLLAMA_TIMEOUT`.
+If charges appear, resize the VM rather than deleting it (**Compute → Instances → Edit → Edit shape**, 2 OCPU / 12 GB). A new VM may not be allowed above the free size. Both bots still fit, because they share one model, but replies take about twice as long, so raise `OLLAMA_TIMEOUT` (to about 180).
 
 ### Going back to the laptop
 
