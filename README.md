@@ -72,8 +72,8 @@ The bot runs in Docker on the Oracle Cloud VM, next to the expense-tracker stack
 1. **Clone** the repo to `~/stock-bot` the same way `~/expense-tracker` was cloned (`git -C ~/expense-tracker remote -v` shows how).
 2. **Measure the model** on the server: run `docker exec -it expense-ollama ollama run qwen2.5:7b --verbose` and ask something short to warm it up, then paste about 1,000 tokens of text (a `/why` prompt is 800–1,100). The *prompt eval rate* and *eval rate* lines give tokens per second; on the 4-core VM they were about 20 and 6. A `/why` there takes 28–53 s (the model reads the prompt at about 20 tokens/s, so the bot sends a short one and caps the reply), so `OLLAMA_TIMEOUT=90`. If your measurement differs, use the slowest `/why` time plus 50%.
 3. **Settings**: `cp .env.example .env`, fill it in as in [Setup](#setup-run-locally), then `chmod 600 .env`. Leave out `OLLAMA_URL` and `DB_PATH`: `docker-compose.yml` sets both.
-4. **Stop the laptop bot**: `launchctl unload ~/Library/LaunchAgents/com.stockbot.plist && rm ~/Library/LaunchAgents/com.stockbot.plist`.
-5. **Move the database**, so your locked blueprint keeps its version and old alerts aren't sent again:
+4. **Stop the laptop bot**: `launchctl unload ~/Library/LaunchAgents/com.stockbot.plist && rm ~/Library/LaunchAgents/com.stockbot.plist`. Also stop any copy started by hand (`./run.sh` or `python -m stockbot` in a terminal): `pgrep -fi 'python.* -m stockbot'` must print nothing. Use `-i`: macOS names the process `Python`, so a plain `pgrep -f "python -m stockbot"` misses it, and the two bots then fight over the Telegram token (409 Conflict).
+5. **Move the database**, so your locked blueprint keeps its version and old alerts aren't sent again: (Take the backup only after the laptop bot has stopped, or it is out of date at once.)
    ```sh
    # laptop
    sqlite3 data/stockbot.db ".backup stockbot-migrate.db"
@@ -81,8 +81,9 @@ The bot runs in Docker on the Oracle Cloud VM, next to the expense-tracker stack
    # server
    docker volume create stock-bot_stockbot_data
    docker run --rm -v stock-bot_stockbot_data:/data -v ~/stockbot-migrate.db:/src.db:ro alpine \
-     sh -c 'cp /src.db /data/stockbot.db && chown 1000:1000 /data/stockbot.db'
+     sh -c 'cp /src.db /data/stockbot.db && chown -R 1000:1000 /data'
    ```
+   `chown -R` matters: the volume's own directory must belong to uid 1000 too, or SQLite can't create its journal file and the log says "attempt to write a readonly database".
 6. **Start**: `docker compose up -d --build`, then `docker compose logs -f stock-bot`. Look for "stock bot running" and the Notion sync count, and make sure there's no "Ollama is not reachable" and no 409 Conflict. Send `/blueprint` to check the version.
 
 ### Deploys
@@ -109,26 +110,22 @@ A restart alone, including Dozzle's **Restart** button, keeps the old values: Do
 
 ### Backups
 
-[scripts/backup.sh](scripts/backup.sh) saves a consistent copy of the database to `~/backups/stock-bot/stockbot-YYYY-MM-DD.db.gz` without stopping the bot, and keeps 30 days. It also uploads each copy off the VM, so a lost VM doesn't take the backups with it.
+The server keeps no backup. [scripts/backup.sh](scripts/backup.sh) runs on your **laptop**: it connects over ssh, takes a consistent SQLite online backup inside the running container (no stop), streams it down gzipped, checks that the downloaded copy opens, and keeps 30 days in `~/backups/stock-bot/stockbot-YYYY-MM-DD.db.gz`. Nothing is left on the VM.
 
-1. In the OCI console (home region): **Storage → Buckets → Create bucket** `stock-bot-backups` (Standard, private). Under **Lifecycle Policy Rules**, delete objects older than 90 days.
-2. In the bucket: **Pre-Authenticated Requests → Create**: target *Bucket*, access *Permit object writes*, expiry 1 year. Copy the URL (it ends in `/o/`).
-3. On the server: `printf 'BACKUP_PAR_URL=%s\n' '<url>' > ~/stock-bot/.backup.env && chmod 600 ~/stock-bot/.backup.env`. The URL is a credential: keep it out of git and chat.
-4. Add the cron job (`crontab -e`) and run it once by hand:
-   ```
-   45 2 * * * ~/stock-bot/scripts/backup.sh >> ~/backups/stock-bot/backup.log 2>&1
-   ```
+Schedule it daily with the launchd agent (10:00; if the laptop is asleep it runs on wake):
+```sh
+cp deploy/com.stockbot.backup.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.stockbot.backup.plist
+launchctl start com.stockbot.backup   # run once now; log: ~/backups/stock-bot/backup.log
+```
+Each snapshot is about 0.4 MB. If the laptop is off for days there is no backup for those days, and a lost VM then loses the changes since the last one. That is the accepted trade-off.
 
-**The upload URL expires on: _(fill in when created)_.** After that the script keeps local copies but exits with an error. Create a new URL before then.
-
-A snapshot is about 0.5 MB, so the bucket stays far inside the free 20 GB.
-
-**Restore**: copy the snapshot into `~/stock-bot`, from `~/backups/stock-bot/` or by downloading it from the bucket in the OCI console, then:
+**Restore**: `scp` a snapshot from `~/backups/stock-bot/` on the laptop into `~/stock-bot` on the VM, then:
 ```sh
 cd ~/stock-bot && docker compose stop stock-bot
 gunzip -k stockbot-YYYY-MM-DD.db.gz
 docker run --rm -v stock-bot_stockbot_data:/data -v "$PWD/stockbot-YYYY-MM-DD.db":/src.db:ro alpine \
-  sh -c 'cp /src.db /data/stockbot.db && chown 1000:1000 /data/stockbot.db'
+  sh -c 'cp /src.db /data/stockbot.db && chown -R 1000:1000 /data'
 docker compose start stock-bot
 ```
 

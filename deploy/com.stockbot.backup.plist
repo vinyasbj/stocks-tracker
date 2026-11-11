@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LAPTOP ONLY. Pulls a snapshot of the server bot's database to ~/backups/stock-bot once a day at 10:00
+  (if the laptop is asleep then, launchd runs it when it wakes). The VM stores no backup.
+    cp deploy/com.stockbot.backup.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.stockbot.backup.plist
+  Run now:  launchctl start com.stockbot.backup
+  Stop:     launchctl unload ~/Library/LaunchAgents/com.stockbot.backup.plist && rm ~/Library/LaunchAgents/com.stockbot.backup.plist
+  Log:      ~/backups/stock-bot/backup.log
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.stockbot.backup</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/vinyas/playground/stock-bot/scripts/backup.sh</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+    </dict>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>10</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>/Users/vinyas/backups/stock-bot/backup.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/vinyas/backups/stock-bot/backup.log</string>
+</dict>
+</plist>
