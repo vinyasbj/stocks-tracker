@@ -58,4 +58,5 @@
 - [x] 8.6 For a stock not held, judgment rules are not applicable and a BUY says how many to confirm before buying; verify with tests
 - [x] 8.7 Show a net margin of n/a when Yahoo reports 0 for a company with no revenue, and say changes in a loss in words ("loss widened 97%"); verify with tests
 - [x] 8.8 ETFs and funds in `/why`: found by exact ticker (preferred over fuzzy company-name matches, never over an exact listed symbol), shown with Yahoo's fund figures, description and the thesis, with no verdict and no model call; the header leaves out a missing market cap and sector; verify with tests and real runs for QQQM, URA, SOXX and DRAM
-- [ ] 8.9 Re-run 7.2 in Telegram after these changes, with only one bot instance polling the token
+- [x] 8.9 Re-run 7.2 in Telegram after these changes, with only one bot instance polling the token
+  - Done 2026-11-11: the investor reported the Telegram retest done with only the server bot polling the token (deploy-oracle 5.6), and later tested `/why` on the server
