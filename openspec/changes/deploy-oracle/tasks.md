@@ -44,7 +44,8 @@
 - [x] 5.8 Off-VM backup target: dropped 2026-11-11 at the investor's request ("no need to take backup in VM, take backup in local daily"). No OCI bucket or pre-authenticated request; `scripts/backup.sh` no longer uploads anything (design D6)
 - [x] 5.9 Install the backup: `scripts/backup.sh` now runs on the laptop and pulls the snapshot over ssh; the VM cron line was removed (expense-tracker's two entries untouched). Verify that a manual run writes a dated `.db.gz` in `~/backups/stock-bot/` that opens with `sqlite3`, and that no temp file is left on the VM, and that `deploy/com.stockbot.backup.plist` runs it daily
   - 2026-11-11: manual run wrote `stockbot-2026-11-11.db.gz` (380 KB, 2,888 seen items, integrity ok), nothing left on the VM, VM cron removed. Still to do by the investor: `cp deploy/com.stockbot.backup.plist ~/Library/LaunchAgents/ && launchctl load ~/Library/LaunchAgents/com.stockbot.backup.plist` (the assistant's attempt to install it was blocked), then `launchctl start com.stockbot.backup` and check `~/backups/stock-bot/backup.log`
-- [ ] 5.10 Dead-man's switch (D9): create a free healthchecks.io check (period 15 min, grace 30 min, notify by email or Telegram) and put its ping URL in `~/stock-bot/.env` as `HEARTBEAT_URL`, then run `docker compose up -d --force-recreate stock-bot`. Verify the check turns "up" after the next monitor pass, then run `docker compose stop stock-bot` for about 45 minutes and confirm the notification arrives. Start the bot again and confirm the check recovers
+- [x] 5.10 (deferred) Dead-man's switch (D9): create a free healthchecks.io check (period 15 min, grace 30 min, notify by email or Telegram) and put its ping URL in `~/stock-bot/.env` as `HEARTBEAT_URL`, then run `docker compose up -d --force-recreate stock-bot`. Verify the check turns "up" after the next monitor pass, then run `docker compose stop stock-bot` for about 45 minutes and confirm the notification arrives. Start the bot again and confirm the check recovers
+  - Deferred 2026-11-11 at the investor's request: no healthchecks.io check for now. `HEARTBEAT_URL` stays empty, so the bot sends no pings; a hang or VM outage shows only as a missing morning digest. The code and README support it, so set it up later by creating the check and adding `HEARTBEAT_URL` through Apply settings
 
 ## 6. Go live through CI (D8 step 4)
 
@@ -64,7 +65,7 @@
 ## Workflow follow-up
 
 - Archive `conviction-blueprint` once its 8.9 retest (task 5.6) is ticked there.
-- Archive `deploy-oracle` after a day of normal operation: a morning digest at 08:30 IST, monitor passes in the log and heartbeat pings, and a daily backup file on the laptop.
+- Archive `deploy-oracle` after a day of normal operation: a morning digest at 08:30 IST, monitor passes in the log, and a daily backup file on the laptop.
 - Consider giving expense-tracker the same laptop backup and heartbeat; its backups are only on the VM.
 - Not built, if `/why` still feels slow: pre-generate explanations for every holding overnight so most calls are instant, and have code write the failing-rule sentence so the model covers only news and what to watch (design D10). The thesis lines in Notion are currently the unfilled template text, which costs about 150 prompt tokens per held stock.
 - `conviction-upkeep` starts from `main` afterwards; its deploys go through this CI.
