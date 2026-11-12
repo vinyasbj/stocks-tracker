@@ -14,9 +14,12 @@ NI_YOY = Rule("Profit up YoY", "Growth", "ni_yoy", ">=", 0, False)
 PE = Rule("P/E at most 40", "Valuation", "pe", "<=", 40, False)
 LOSS = Rule("Profit-making: not loss-making in each of the last 2 years", "Quality", "loss_years", "<=", 1, True)
 MOAT = Rule("Durable moat", "Business", JUDGMENT, "", None, True)
+GRAHAM = Rule("Price at most Graham number", "Valuation", "price_to_graham", "<=", 1.0, False)
+GRAHAM_IV = Rule("Price at most Graham IV", "Valuation", "price_to_graham_iv", "<=", 1.0, False)
 
 TECH = {"sector": "Technology", "industry": "Software"}
 BANK = {"sector": "Financial Services", "industry": "Banks - Regional"}
+MFG = {"sector": "Industrials", "industry": "Machinery"}
 
 
 def one(rule, m, f=TECH, thesis=None):
@@ -39,6 +42,37 @@ def test_no_data_is_unknown():
 def test_leverage_rules_do_not_apply_to_banks(rule):
     c = one(rule, {"debt_to_equity": 8, "current_ratio": 0.2, "fcf_positive_years": 0}, BANK)
     assert c.status == "na"
+
+
+def test_graham_number_does_not_apply_to_tech():
+    c = one(GRAHAM, {"price_to_graham": 0.8}, TECH)
+    assert c.status == "na"
+    assert "not applicable for asset-light tech" in c.note
+
+
+def test_graham_number_applies_to_traditional_industries():
+    c_pass = one(GRAHAM, {"price_to_graham": 0.85}, MFG)
+    assert c_pass.status == "pass"
+    assert c_pass.note == "0.85"
+
+    c_fail = one(GRAHAM, {"price_to_graham": 1.45}, MFG)
+    assert c_fail.status == "fail"
+    assert c_fail.note == "1.45"
+
+
+def test_graham_intrinsic_value_applies_to_tech_and_manufacturing():
+    c_tech = one(GRAHAM_IV, {"price_to_graham_iv": 0.90}, TECH)
+    assert c_tech.status == "pass"
+
+    c_mfg = one(GRAHAM_IV, {"price_to_graham_iv": 1.25}, MFG)
+    assert c_mfg.status == "fail"
+
+
+def test_negative_earnings_and_book_value_fail_graham_rules():
+    assert one(GRAHAM, {"price_to_graham": None, "pe": -5.0}, MFG).status == "fail"
+    assert one(GRAHAM, {"price_to_graham": None}, {**MFG, "eps": -1.0}).status == "fail"
+    assert one(GRAHAM, {"price_to_graham": None}, {**MFG, "pb": -2.0}).status == "fail"
+    assert one(GRAHAM_IV, {"price_to_graham_iv": None, "pe": -5.0}, TECH).status == "fail"
 
 
 def test_out_of_date_quarter_makes_yoy_rules_unknown():
@@ -160,3 +194,83 @@ def test_conviction_mismatch(conviction, code, flagged):
     from stockbot.analysis.verdict import Verdict
 
     assert bool(mismatch(conviction, Verdict(code, "", [], code in ("ADD", "HOLD", "REVIEW", "SELL")))) is flagged
+
+
+PEG = Rule("PEG ratio at most 1.0", "Valuation", "peg", "<=", 1.0, False)
+CASH = Rule("Cash conversion at least 80%", "Quality", "cash_conversion", ">=", 80, False)
+PROMOTER = Rule("Promoter holding at least 60% (India)", "Business", "promoter_holding", ">=", 60, False)
+INDIA = {**MFG, "country": "India", "currency": "INR"}
+
+
+def test_peg_passes_and_fails_on_its_limit():
+    assert one(PEG, {"peg": 0.8}, MFG).status == "pass"
+    assert one(PEG, {"peg": 1.6}, MFG).status == "fail"
+    assert one(PEG, {"peg": None}, MFG).status == "unknown"
+
+
+def test_non_positive_peg_never_passes_a_peg_limit():
+    assert one(PEG, {"peg": -0.4}, MFG).status == "fail"
+    assert one(PEG, {"peg": None, "net_margin": -3.0}, MFG).status == "fail"
+
+
+def test_cash_conversion_does_not_apply_to_banks():
+    assert one(CASH, {"cash_conversion": 120}, BANK).status == "na"
+    assert one(CASH, {"cash_conversion": 95}, MFG).status == "pass"
+    assert one(CASH, {"cash_conversion": 50}, MFG).status == "fail"
+
+
+def test_promoter_holding_only_applies_to_india():
+    assert one(PROMOTER, {"promoter_holding": 70}, MFG).status == "na"
+    assert one(PROMOTER, {"promoter_holding": 70}, INDIA).status == "pass"
+    assert one(PROMOTER, {"promoter_holding": 45}, INDIA).status == "fail"
+    assert one(PROMOTER, {}, INDIA).status == "unknown"
+
+
+PE_MED = Rule("P/E at or below 5-year median", "Valuation", "pe_vs_median", "<=", 1, True)
+PE_CON = Rule("P/E contraction with stock price appreciation", "Valuation", "pe_contraction", ">=", 1, True)
+CAP = Rule("Cap-Adjusted Profit CAGR", "Growth", "cap_profit_cagr", ">=", 0, True)
+PEERS = Rule("Positive EPS outperforming sector median", "Quality", "eps_vs_peers", ">=", 1, True)
+
+
+def test_pe_vs_median_shows_both_pes():
+    c = one(PE_MED, {"pe_vs_median": 0.9, "pe": 18.0, "pe_median": 20.0, "pe_median_years": 4}, MFG)
+    assert c.status == "pass"
+    assert c.note == "0.90 (P/E 18.0 vs 4y median 20.0)"
+    assert one(PE_MED, {"net_margin": -4.0}, MFG).status == "fail"
+
+
+def test_yes_no_rules_read_as_yes_and_no():
+    m = {"pe_contraction": 1.0, "pe": 18.0, "pe_then": 20.0, "pe_then_date": "2026-03-31", "price_change_since": 15.0}
+    c = one(PE_CON, m, MFG)
+    assert c.status == "pass"
+    assert c.note == "yes (P/E 20.0 → 18.0, price +15.0% since 2026-03-31)"
+    assert c.short() == "P/E contraction yes (P/E 20.0 → 18.0, price +15.0% since 2026-03-31) (need yes)"
+    assert PE_CON.condition() == "P/E contraction: yes"
+    assert one(PE_CON, {"pe_contraction": 0.0}, MFG).status == "fail"
+    assert one(PE_CON, {}, MFG).status == "unknown"
+
+
+def test_cap_adjusted_cagr_names_the_band():
+    m = {"cap_profit_cagr": -3.0, "ni_cagr": 12.0, "ni_cagr_years": 3, "cap_hurdle": 15.0, "cap_band": "mid"}
+    c = one(CAP, m, MFG)
+    assert c.status == "fail" and c.note == "12.0% vs 15% for mid cap"
+
+
+def test_eps_against_peers():
+    m = {"eps_vs_peers": 1.0, "eps_growth": 15.0, "peer_eps_growth_median": 9.0, "peer_count": 10, "peer_market": "NSE"}
+    c = one(PEERS, m, MFG)
+    assert c.status == "pass"
+    assert c.note == "yes (EPS growth 15.0% vs median 9.0% of 10 NSE industry peers)"
+    assert one(PEERS, {"eps_vs_peers": 0.0}, MFG).note == "no (EPS is not positive)"
+    assert one(PEERS, {}, MFG).status == "unknown"
+
+
+def test_unknowns_say_why():
+    c = one(PEERS, {"eps_vs_peers_why": "only 2 industry peers with EPS growth on Yahoo"}, MFG)
+    assert c.status == "unknown"
+    assert c.short() == "EPS beats peers n/a (only 2 industry peers with EPS growth on Yahoo)"
+
+
+def test_pe_contraction_shows_enough_decimals_to_see_the_change():
+    m = {"pe_contraction": 1.0, "pe": 17.31, "pe_then": 17.34, "pe_then_date": "2026-03-31", "price_change_since": 4.4}
+    assert one(PE_CON, m, MFG).note == "yes (P/E 17.34 → 17.31, price +4.4% since 2026-03-31)"

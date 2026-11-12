@@ -18,8 +18,46 @@ For each rule in the locked blueprint the bot SHALL produce one of: pass, fail, 
 - **THEN** the current-ratio rule is unknown, with "no data"
 
 #### Scenario: Leverage rules on a bank
-- **WHEN** the stock is a bank or other financial company and the rule uses Debt/Equity, Current ratio or FCF positive years
+- **WHEN** the stock is a bank or other financial company and the rule uses Debt/Equity, Current ratio, FCF positive years or Cash conversion
 - **THEN** the rule is not applicable and does not count towards any total
+
+#### Scenario: Graham number on asset-light companies
+- **WHEN** the stock is a tech, software or asset-light service company and the rule uses Price/Graham
+- **THEN** the rule is not applicable ("not applicable for asset-light tech & software") and does not count towards any total
+
+#### Scenario: Promoter holding outside India
+- **WHEN** the stock is not India-listed and the rule uses Promoter holding
+- **THEN** the rule is not applicable and does not count towards any total
+
+#### Scenario: Non-positive PEG
+- **WHEN** a rule limits PEG and the stock's PEG is zero or negative, or earnings are negative
+- **THEN** the rule fails ("negative earnings or growth")
+
+#### Scenario: P/E against its own history
+- **WHEN** a rule uses P/E vs 5Y median
+- **THEN** the value is the current P/E over the median of past fiscal-year-end P/Es (year-end price over that year's diluted EPS, profitable years only, at least 3 of them); a loss-making stock fails it, and a stock priced in one currency but reporting in another is unknown with that reason
+
+#### Scenario: P/E contraction
+- **WHEN** a rule uses P/E contraction
+- **THEN** it is yes only when the price rose and the P/E fell since the fiscal year end nearest 12 months back (6 to 18 months), and no when there is no profit now
+
+#### Scenario: Cap-adjusted profit CAGR
+- **WHEN** a rule uses Cap-adjusted profit CAGR
+- **THEN** the value is Profit CAGR 3Y minus the bar for the company's size: large 10%, mid 15%, small 20%, where large is at least $10B / ₹80,000 cr and mid at least $2B / ₹25,000 cr; other currencies are unknown
+
+#### Scenario: EPS against industry peers
+- **WHEN** a rule uses EPS beats peers
+- **THEN** it is yes when EPS is positive and Yahoo's EPS growth YoY is above the median of the 10 largest companies by market cap in the same industry and the same market (the stock itself left out), no when EPS is not positive, and unknown with the reason when fewer than 3 peers have a figure
+
+#### Scenario: Peers never cross markets
+- **WHEN** the stock is an Indian company (NSE-listed, or its US ADR such as INFY)
+- **THEN** its peers are NSE-listed companies only
+- **WHEN** the stock is any other US-listed company
+- **THEN** its peers are NYSE and Nasdaq listings only, leaving out over-the-counter quotes, preferred shares and Indian companies' ADRs (HDB, IBN, INFY, WIT)
+
+#### Scenario: Unknown says why
+- **WHEN** a derived metric has no value
+- **THEN** the check names the reason (for example "only 2 industry peers with EPS growth on Yahoo") rather than just n/a
 
 #### Scenario: Out-of-date quarter
 - **WHEN** Yahoo's latest quarter for the stock is out of date

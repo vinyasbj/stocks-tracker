@@ -1,5 +1,7 @@
 from datetime import date
 
+import pytest
+
 from stockbot.analysis import fmt, metrics, signals
 
 
@@ -135,3 +137,167 @@ def test_only_the_conviction_prompt_may_speak_of_buying_or_selling():
     assert "never change" in systems["CONVICTION_SYSTEM"]
     assert "no numbers" in systems["PROFILE_SYSTEM"]
     assert "check" in prompts.Intent.model_fields["intent"].annotation.__args__
+
+
+def test_graham_number_computation():
+    # 1. Explicit EPS and BVPS
+    f = {"price": 100.0, "eps": 5.0, "bvps": 20.0, "pe": 20.0, "pb": 5.0}
+    m = metrics.compute(f)
+    # Graham number = sqrt(22.5 * 5.0 * 20.0) = sqrt(2250) = 47.434...
+    assert round(m["graham_number"], 2) == 47.43
+    # Price to Graham = 100 / 47.434 = 2.11
+    assert round(m["price_to_graham"], 2) == 2.11
+
+    # 2. Derived from P/E and P/B when explicit eps/bvps missing
+    f2 = {"price": 50.0, "pe": 10.0, "pb": 1.5}
+    m2 = metrics.compute(f2)
+    # Ratio = sqrt((10 * 1.5) / 22.5) = sqrt(15 / 22.5) = sqrt(0.6666...) = 0.816
+    assert round(m2["price_to_graham"], 2) == 0.82
+    assert round(m2["graham_number"], 2) == 61.24
+
+
+def test_graham_intrinsic_value_computation():
+    # US stock (Bond yield defaults to 4.4%)
+    f_us = {"price": 100.0, "eps": 4.0, "pe": 25.0, "currency": "USD"}
+    # Growth = 10% -> IV = (4.0 * (8.5 + 2 * 10) * 4.4) / 4.4 = 4.0 * 28.5 = 114.0
+    m_us = metrics.compute({**f_us, "quarterly": [], "annual": [
+        {"period": "2026-06-30", "revenue": 100, "net_income": 121},
+        {"period": "2025-06-30", "revenue": 100, "net_income": 110},
+        {"period": "2024-06-30", "revenue": 100, "net_income": 100},
+    ]})
+    assert round(m_us["graham_iv"], 1) == 114.0
+    assert round(m_us["price_to_graham_iv"], 2) == round(100.0 / 114.0, 2)
+
+    # Indian stock (Bond yield 7.0%)
+    f_in = {"price": 500.0, "eps": 25.0, "pe": 20.0, "currency": "INR", "annual": [
+        {"period": "2026-03-31", "revenue": 100, "net_income": 110},
+        {"period": "2025-03-31", "revenue": 100, "net_income": 105},
+        {"period": "2024-03-31", "revenue": 100, "net_income": 100},
+    ]}
+    m_in = metrics.compute(f_in)
+    # CAGR 100 -> 110 over 2 years = sqrt(1.1) - 1 = 4.88%
+    # IV = (25.0 * (8.5 + 2 * 4.88) * 4.4) / 7.0 = (25.0 * 18.26 * 4.4) / 7.0 = 287.0
+    assert round(m_in["graham_iv"], 1) == 287.0
+
+
+def test_is_asset_light():
+    assert signals.is_asset_light({"sector": "Technology", "industry": "Software"}) is True
+    assert signals.is_asset_light({"sector": "Communication Services", "industry": "Internet Content"}) is True
+    assert signals.is_asset_light({"sector": "Industrials", "industry": "Freight"}) is False
+    assert signals.is_asset_light({"sector": "Utilities", "industry": "Electric"}) is False
+    assert signals.is_asset_light({"sector": "Basic Materials", "industry": "Steel"}) is False
+    assert signals.is_asset_light({}) is False
+
+
+def test_peg_cash_conversion_and_promoter_holding():
+    annual = [
+        {"period": "2026-03-31", "revenue": 100, "net_income": 133.1, "operating_cf": 100.0},
+        {"period": "2025-03-31", "revenue": 100, "net_income": 121},
+        {"period": "2024-03-31", "revenue": 100, "net_income": 110},
+        {"period": "2023-03-31", "revenue": 100, "net_income": 100},
+    ]
+    m = metrics.compute({"price": 100.0, "pe": 20.0, "insiders_held": 0.625, "annual": annual})
+    assert round(m["cash_conversion"], 1) == 75.1  # 100 / 133.1
+    assert round(m["peg"], 2) == 2.0  # 20 / 10% profit CAGR
+    assert m["promoter_holding"] == 62.5
+    # Yahoo's own PEG wins over the derived one
+    assert metrics.compute({"pe": 20.0, "peg": 0.9, "annual": annual})["peg"] == 0.9
+    # a loss gives no cash conversion, shrinking profit no PEG
+    loss = [{"period": "2026-03-31", "revenue": 100, "net_income": -5, "operating_cf": 10.0}]
+    m2 = metrics.compute({"pe": 20.0, "annual": loss})
+    assert "cash_conversion" not in m2 and m2["peg"] is None and "promoter_holding" not in m2
+
+
+# --- P/E against its own past, cap-adjusted CAGR, peers ---
+
+YEARS = [  # newest first: (period, EPS, price at year end) -> P/E 20, 25, 30, 22
+    {"period": "2026-03-31", "eps": 10.0, "price_end": 200.0},
+    {"period": "2025-03-31", "eps": 8.0, "price_end": 200.0},
+    {"period": "2024-03-31", "eps": 6.0, "price_end": 180.0},
+    {"period": "2023-03-31", "eps": 5.0, "price_end": 110.0},
+]
+
+
+def test_pe_against_its_median_of_past_year_ends():
+    m = metrics.compute({"price": 230.0, "pe": 23.0, "annual": YEARS}, today=date(2026, 11, 12))
+    assert m["pe_median"] == 23.5  # median of 20, 25, 30, 22
+    assert m["pe_median_years"] == 4
+    assert round(m["pe_vs_median"], 3) == round(23 / 23.5, 3)
+
+
+def test_pe_median_needs_three_year_ends():
+    m = metrics.compute({"price": 230.0, "pe": 23.0, "annual": YEARS[:2]}, today=date(2026, 11, 12))
+    assert "pe_vs_median" not in m
+
+
+def test_pe_contraction_against_the_year_end_about_a_year_back():
+    # 2026-03-31 is 226 days back (nearest to 365 in the 6-18 month window): P/E then 20, price then 200.
+    up_cheaper = metrics.compute({"price": 230.0, "pe": 18.0, "annual": YEARS}, today=date(2026, 11, 12))
+    assert up_cheaper["pe_then_date"] == "2026-03-31" and up_cheaper["pe_then"] == 20.0
+    assert up_cheaper["pe_contraction"] == 1.0 and round(up_cheaper["price_change_since"], 1) == 15.0
+    up_dearer = metrics.compute({"price": 230.0, "pe": 23.0, "annual": YEARS}, today=date(2026, 11, 12))
+    assert up_dearer["pe_contraction"] == 0.0
+    down_cheaper = metrics.compute({"price": 150.0, "pe": 15.0, "annual": YEARS}, today=date(2026, 11, 12))
+    assert down_cheaper["pe_contraction"] == 0.0  # P/E fell only because the price did
+
+
+def test_pe_contraction_is_no_when_there_is_no_profit_now():
+    m = metrics.compute({"price": 230.0, "pe": None, "eps": -2.0, "annual": YEARS}, today=date(2026, 11, 12))
+    assert m["pe_contraction"] == 0.0
+
+
+def test_past_pes_skip_a_currency_mismatch():
+    f = {"price": 1500.0, "pe": 23.0, "currency": "INR", "financial_currency": "USD", "annual": YEARS}
+    m = metrics.compute(f, today=date(2026, 11, 12))
+    assert "pe_vs_median" not in m and "pe_contraction" not in m
+
+
+@pytest.mark.parametrize(
+    "cap,currency,band",
+    [(3e12, "USD", "large"), (5e9, "USD", "mid"), (1e9, "USD", "small"),
+     (9e11, "INR", "large"), (3e11, "INR", "mid"), (1e11, "INR", "small"), (5e9, "EUR", None)],
+)
+def test_cap_bands(cap, currency, band):
+    assert metrics.cap_band(cap, currency) == band
+
+
+def test_cap_adjusted_profit_cagr_is_the_margin_over_the_bands_bar():
+    annual = [{"period": f"{2026 - i}-03-31", "net_income": 100 / 1.12**i} for i in range(4)]  # 12% CAGR
+    m = metrics.compute({"market_cap": 5e9, "currency": "USD", "annual": annual})
+    assert m["cap_band"] == "mid" and m["cap_hurdle"] == 15.0
+    assert round(m["cap_profit_cagr"], 1) == -3.0
+
+
+def test_peer_outperformance():
+    peers = {"INFY.NS": 0.05, "HCLTECH.NS": 0.08, "WIPRO.NS": 0.10, "TECHM.NS": 0.20, "TCS.NS": 0.99}
+    m = {"eps": 140.0}
+    metrics.peer_outperformance(m, {"earnings_growth_yoy": 0.15}, peers, "TCS", "NSE")
+    assert m["peer_count"] == 4 and round(m["peer_eps_growth_median"], 1) == 9.0  # TCS.NS itself left out
+    assert m["eps_vs_peers"] == 1.0 and m["peer_market"] == "NSE"
+    adr = {"eps": 1.0}
+    metrics.peer_outperformance(adr, {"earnings_growth_yoy": 0.15}, peers, "INFY", "NSE")  # the ADR drops INFY.NS
+    assert adr["peer_count"] == 4
+    loss = {"eps": -1.0}
+    metrics.peer_outperformance(loss, {"earnings_growth_yoy": 0.50}, peers, "TCS", "NSE")
+    assert loss["eps_vs_peers"] == 0.0  # EPS must be positive
+    few = {"eps": 1.0}
+    metrics.peer_outperformance(few, {"earnings_growth_yoy": 0.15}, {"IBM": 0.05, "ACN": 0.08}, "MSFT", "US")
+    assert "eps_vs_peers" not in few
+
+
+def test_at_most_ten_peers_count():
+    peers = {f"P{i}": i / 100 for i in range(11)}
+    m = {"eps": 1.0}
+    metrics.peer_outperformance(m, {"earnings_growth_yoy": 0.5}, peers, "XYZ", "US")
+    assert m["peer_count"] == 10
+
+
+def test_missing_history_and_peers_say_why():
+    f = {"price": 1500.0, "pe": 23.0, "currency": "INR", "financial_currency": "USD", "annual": YEARS}
+    m = metrics.compute(f, today=date(2026, 11, 12))
+    assert m["pe_vs_median_why"] == "priced in INR but reports in USD"
+    short = metrics.compute({"price": 230.0, "pe": 23.0, "annual": YEARS[:2]}, today=date(2026, 11, 12))
+    assert short["pe_vs_median_why"] == "only 2 profitable year ends with a price"
+    few = {"eps": 1.0}
+    metrics.peer_outperformance(few, {"earnings_growth_yoy": 0.15}, {"IBM": 0.05}, "MSFT", "US")
+    assert few["eps_vs_peers_why"] == "only 1 US industry peer with EPS growth on Yahoo"

@@ -7,7 +7,7 @@ give the same verdict.
 from dataclasses import dataclass
 
 from . import signals
-from .blueprint import METRICS, VALUATION, Rule, fmt_value
+from .blueprint import METRICS, VALUATION, YES_NO, Rule, fmt_value
 from .thesis import Thesis
 
 STALE_SENSITIVE = ("rev_yoy", "ni_yoy")  # describe the latest quarter, which may be out of date
@@ -31,8 +31,7 @@ class Check:
         m = METRICS[self.rule.metric]
         if self.status == "unknown":
             return f"{m.label} n/a ({self.note})" if self.note and self.note != "no data" else f"{m.label} n/a"
-        need = f"{'≥' if self.rule.op == '>=' else '≤'} {fmt_value(self.rule.threshold, m.unit)}"
-        return f"{m.label} {self.note} (need {need})"
+        return f"{m.label} {self.note} (need {self.rule.need()})"
 
 
 TO_CONFIRM = "yours to confirm before buying"
@@ -67,6 +66,12 @@ def evaluate(
         if metric.not_for_financials and fin:
             out.append(Check(r, "na", note="not meaningful for banks and financials"))
             continue
+        if metric.asset_heavy_only and signals.is_asset_light(f):
+            out.append(Check(r, "na", note="not applicable for asset-light tech & software"))
+            continue
+        if metric.india_only and not signals.is_india(f):
+            out.append(Check(r, "na", note="only applies to India-listed companies"))
+            continue
         if stale and r.metric in STALE_SENSITIVE:
             out.append(Check(r, "unknown", note="Yahoo's latest quarter is out of date"))
             continue
@@ -75,8 +80,27 @@ def evaluate(
             # Yahoo leaves P/E empty when earnings are negative; a P/E limit is not met then.
             out.append(Check(r, "fail", v, "negative earnings"))
             continue
+        if r.metric == "pe_vs_median" and v is None and (m.get("net_margin") or 0) < 0:
+            out.append(Check(r, "fail", v, "negative earnings"))
+            continue
+        if r.metric == "peg" and ((v is not None and v <= 0) or (v is None and (m.get("net_margin") or 0) < 0)):
+            # A PEG at or below zero means negative earnings or shrinking profit, which a PEG limit must not pass.
+            out.append(Check(r, "fail", v, "negative earnings or growth"))
+            continue
+        if r.metric in ("price_to_graham", "price_to_graham_iv") and (
+            (m.get("pe") is not None and m["pe"] <= 0)
+            or (m.get("net_margin") is not None and m["net_margin"] < 0)
+            or (f.get("eps") is not None and f["eps"] <= 0)
+        ):
+            out.append(Check(r, "fail", v, "negative earnings"))
+            continue
+        if r.metric == "price_to_graham" and (
+            (f.get("pb") is not None and f["pb"] <= 0) or (f.get("bvps") is not None and f["bvps"] <= 0)
+        ):
+            out.append(Check(r, "fail", v, "negative book value"))
+            continue
         if v is None:
-            out.append(Check(r, "unknown", note="no data"))
+            out.append(Check(r, "unknown", note=m.get(f"{r.metric}_why") or "no data"))
             continue
         ok = v >= r.threshold if r.op == ">=" else v <= r.threshold
         note = fmt_value(v, metric.unit)
@@ -84,8 +108,29 @@ def evaluate(
             note = f"{v:g} of {m['fcf_years']} years"
         elif r.metric in ("rev_cagr", "ni_cagr") and m.get(f"{r.metric}_years") not in (None, 3):
             note += f" over {m[f'{r.metric}_years']}y"
+        else:
+            note = _detail(r.metric, m) or note
         out.append(Check(r, "pass" if ok else "fail", v, note))
     return out
+
+
+def _detail(metric: str, m: dict) -> str | None:
+    """The numbers behind a derived metric, so a pass or fail can be checked by eye."""
+    if metric == "cap_profit_cagr" and m.get("ni_cagr") is not None:
+        years = f" over {m['ni_cagr_years']}y" if m.get("ni_cagr_years") not in (None, 3) else ""
+        return f"{m['ni_cagr']:.1f}%{years} vs {m['cap_hurdle']:g}% for {m['cap_band']} cap"
+    if metric == "pe_vs_median" and m.get("pe_median") is not None:
+        return f"{m['pe_vs_median']:.2f} (P/E {m['pe']:.1f} vs {m['pe_median_years']}y median {m['pe_median']:.1f})"
+    if metric == "pe_contraction" and m.get("pe_then") is not None and (m.get("pe") or 0) > 0:
+        dp = 1 if f"{m['pe_then']:.1f}" != f"{m['pe']:.1f}" else 2  # "17.3 → 17.3" would hide the change
+        return (f"{fmt_value(m['pe_contraction'], YES_NO)} (P/E {m['pe_then']:.{dp}f} → {m['pe']:.{dp}f}, "
+                f"price {m['price_change_since']:+.1f}% since {m['pe_then_date']})")
+    if metric == "eps_vs_peers" and m.get("eps_growth") is not None:
+        return (f"{fmt_value(m['eps_vs_peers'], YES_NO)} (EPS growth {m['eps_growth']:.1f}% vs "
+                f"median {m['peer_eps_growth_median']:.1f}% of {m['peer_count']} {m['peer_market']} industry peers)")
+    if metric == "eps_vs_peers" and m.get("eps_vs_peers") == 0:
+        return "no (EPS is not positive)"
+    return None
 
 
 # --- the verdict ---

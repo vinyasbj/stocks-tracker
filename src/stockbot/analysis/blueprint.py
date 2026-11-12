@@ -17,15 +17,18 @@ PILLARS = ["Business", "Quality", "Growth", "Safety", "Valuation"]
 VALUATION = "Valuation"
 SETTINGS = "Settings"
 DEFAULT_PASS_BAR = 75.0
+YES_NO = "yes/no"
 
 
 @dataclass(frozen=True)
 class Metric:
     label: str
-    unit: str  # "%", "x" or "years"
+    unit: str  # "%", "x", "years" or "yes/no" (1 = yes, 0 = no)
     get: Callable[[dict, dict], float | None]  # (metrics, fundamentals) -> value
     aliases: tuple[str, ...] = ()
     not_for_financials: bool = False  # banks run on leverage; these ratios mean something else there
+    asset_heavy_only: bool = False  # relies on physical book value; not applicable to tech/asset-light
+    india_only: bool = False  # only meaningful for India-listed companies (promoter holding)
 
 
 def _m(key: str) -> Callable[[dict, dict], float | None]:
@@ -45,15 +48,67 @@ METRICS: dict[str, Metric] = {
     "pe": Metric("P/E", "x", _m("pe"), ("pe", "p e", "pe ratio", "price to earnings", "trailing pe")),
     "forward_pe": Metric("Forward P/E", "x", _f("forward_pe"), ("forward pe", "fwd pe")),
     "pb": Metric("P/B", "x", _f("pb"), ("pb", "p b", "price to book")),
+    "price_to_graham": Metric(
+        "Price/Graham",
+        "x",
+        _m("price_to_graham"),
+        ("price to graham", "graham ratio", "graham number", "graham", "price graham"),
+        asset_heavy_only=True,
+    ),
+    "price_to_graham_iv": Metric(
+        "Price/Graham IV",
+        "x",
+        _m("price_to_graham_iv"),
+        ("price to graham iv", "graham iv", "graham iv ratio", "graham intrinsic value", "price graham iv", "intrinsic value"),
+    ),
+    "peg": Metric("PEG", "x", _m("peg"), ("peg ratio", "price earnings growth", "p e g")),
+    "pe_vs_median": Metric(
+        "P/E vs 5Y median",
+        "x",
+        _m("pe_vs_median"),
+        ("pe vs 5y median", "pe vs median", "pe to 5y median", "pe vs 5 year median", "pe median ratio"),
+    ),
+    "pe_contraction": Metric(
+        "P/E contraction",
+        YES_NO,
+        _m("pe_contraction"),
+        ("pe contraction", "pe contraction with price appreciation", "multiple contraction"),
+    ),
     "rev_yoy": Metric("Revenue growth YoY", "%", _m("rev_yoy"), ("sales growth yoy", "revenue yoy")),
     "ni_yoy": Metric("Profit growth YoY", "%", _m("ni_yoy"), ("net profit growth yoy", "profit yoy", "earnings growth yoy")),
     "rev_cagr": Metric("Revenue CAGR 3Y", "%", _m("rev_cagr"), ("revenue cagr", "sales cagr", "sales cagr 3y")),
     "ni_cagr": Metric("Profit CAGR 3Y", "%", _m("ni_cagr"), ("profit cagr", "net profit cagr", "earnings cagr")),
+    "cap_profit_cagr": Metric(
+        "Cap-adjusted profit CAGR",
+        "%",
+        _m("cap_profit_cagr"),
+        ("cap adjusted profit cagr", "cap adjusted cagr", "profit cagr vs cap hurdle"),
+    ),
+    "eps_vs_peers": Metric(
+        "EPS beats peers",
+        YES_NO,
+        _m("eps_vs_peers"),
+        ("sector eps outperformance", "eps outperformance", "eps vs sector", "eps vs peers", "eps beats sector median"),
+    ),
     "fcf_positive_years": Metric(
         "FCF positive years", "years", _m("fcf_positive_years"), ("positive fcf years", "free cash flow positive years"), True
     ),
     "loss_years": Metric(
         "Consecutive loss years", "years", _m("loss_years"), ("loss years", "loss making years", "years of losses")
+    ),
+    "cash_conversion": Metric(
+        "Cash conversion",
+        "%",
+        _m("cash_conversion"),
+        ("cash conversion ratio", "cfo net income", "cfo to net income", "cfo pat", "operating cash flow to net income"),
+        True,
+    ),
+    "promoter_holding": Metric(
+        "Promoter holding",
+        "%",
+        _m("promoter_holding"),
+        ("promoter holdings", "promoters holding", "promoter ownership", "insider holding"),
+        india_only=True,
     ),
     "dividend_yield": Metric("Dividend yield", "%", _f("dividend_yield"), ("dividend",)),
     "from_52w_high": Metric("From 52w high", "%", _m("from_52w_high"), ("from 52 week high", "below 52w high")),
@@ -80,6 +135,8 @@ def metric_key(text: str | None) -> str | None:
 def fmt_value(v: float | None, unit: str) -> str:
     if v is None:
         return "n/a"
+    if unit == YES_NO:
+        return "yes" if v >= 1 else "no"
     if unit == "%":
         return f"{v:.1f}%"
     if unit == "years":
@@ -101,12 +158,19 @@ class Rule:
     def is_judgment(self) -> bool:
         return self.metric == JUDGMENT
 
+    def need(self) -> str:
+        """"≥ 15.0%", or "yes" for a yes/no metric."""
+        m = METRICS[self.metric]
+        if m.unit == YES_NO:
+            return fmt_value(self.threshold, m.unit) if (self.op == ">=") == (self.threshold >= 1) else "yes or no"
+        return f"{'≥' if self.op == '>=' else '≤'} {fmt_value(self.threshold, m.unit)}"
+
     def condition(self) -> str:
-        """"ROE ≥ 15.0%", or "your judgment"."""
+        """"ROE ≥ 15.0%", "P/E contraction: yes", or "your judgment"."""
         if self.is_judgment:
             return "your judgment"
         m = METRICS[self.metric]
-        return f"{m.label} {'≥' if self.op == '>=' else '≤'} {fmt_value(self.threshold, m.unit)}"
+        return f"{m.label}: {self.need()}" if m.unit == YES_NO else f"{m.label} {self.need()}"
 
 
 @dataclass
@@ -225,6 +289,9 @@ def parse_rules(pages: list[dict]) -> Parsed:
             continue
         if threshold is None:
             problems.append(f"{text}: threshold is missing")
+            continue
+        if METRICS[key].unit == YES_NO and threshold not in (0, 1):
+            problems.append(f"{text}: {METRICS[key].label} is yes/no, so the threshold must be 1 (yes) or 0 (no)")
             continue
         if METRICS[key].unit == "%" and 0 < abs(threshold) < 1:
             problems.append(

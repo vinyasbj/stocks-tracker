@@ -9,7 +9,7 @@ from html import escape
 from typing import Awaitable, Callable
 
 from .alerts.monitor import Monitor
-from .analysis import blueprint, report, signals, thesis, verdict
+from .analysis import blueprint, metrics, report, signals, thesis, verdict
 from .analysis.conviction import (
     BlueprintStatus, Conviction, LockResult, Profile, ReportEntry, ReportResult, explain_data,
 )
@@ -246,6 +246,24 @@ class Engine:
             return None, failed, "thesis could not be read"
         return None, None, "no thesis in Notion"
 
+    async def _add_peers(self, sec: Security, r: report.Research) -> None:
+        """EPS growth against the industry's largest companies in the same market; unknown when Yahoo can't say."""
+        f = r.fundamentals
+        if signals.is_fund(f):
+            return
+        industry = market.screener_industry(f.get("industry"))
+        if industry is None:
+            r.metrics["eps_vs_peers_why"] = f"Yahoo lists no peers for industry {f.get('industry')!r}"
+            return
+        where = market.peer_market(sec, f)
+        try:
+            peers = await asyncio.to_thread(market.peer_eps_growth, industry, where, self.store)
+        except Exception as e:
+            log.warning("peers for %s (%s, %s): %s", sec.symbol, industry, where, e)
+            r.metrics["eps_vs_peers_why"] = "couldn't fetch its industry peers"
+            return
+        metrics.peer_outperformance(r.metrics, f, peers, sec.symbol, "NSE" if where == "IN" else "US")
+
     async def conviction(self, sec: Security, with_updates: bool = True, check_notion: bool = True) -> Conviction | None:
         """The stock judged by the locked blueprint; None when nothing is locked yet."""
         locked = self.store.locked_blueprint()
@@ -254,6 +272,8 @@ class Engine:
         holding = self.store.holding(sec)
         held = holding is not None and holding.list_type == "portfolio"
         r = await self.research(sec, with_updates)
+        if any(rule.metric == "eps_vs_peers" for rule in locked.blueprint.rules):
+            await self._add_peers(sec, r)
         th, note, check_note = await asyncio.to_thread(self._thesis, holding)
         checks = verdict.evaluate(
             locked.blueprint.rules, r.metrics, r.fundamentals, th, check_note or "no thesis in Notion", held=held

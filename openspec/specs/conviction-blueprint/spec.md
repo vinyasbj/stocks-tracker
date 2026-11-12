@@ -26,14 +26,14 @@ The bot SHALL read the blueprint from the Notion database set in `NOTION_BLUEPRI
 - **THEN** the bot ignores it
 
 ### Requirement: Numeric rules use a fixed metric vocabulary
-A numeric rule's Metric SHALL name one of: ROE, Net margin, Operating margin, Debt/Equity, Current ratio, P/E, Forward P/E, P/B, Revenue growth YoY, Profit growth YoY, Revenue CAGR 3Y, Profit CAGR 3Y, FCF positive years, Consecutive loss years, Dividend yield, From 52w high. Common spellings (for example "Return on equity", "D/E", "PE ratio") SHALL be accepted. Percentages are written as plain numbers: 15 means 15%.
+A numeric rule's Metric SHALL name one of: ROE, Net margin, Operating margin, Debt/Equity, Current ratio, P/E, Forward P/E, P/B, Price/Graham, Price/Graham IV, PEG, P/E vs 5Y median, P/E contraction (yes/no), Revenue growth YoY, Profit growth YoY, Revenue CAGR 3Y, Profit CAGR 3Y, Cap-adjusted profit CAGR, EPS beats peers (yes/no), FCF positive years, Cash conversion (operating cash flow as % of net profit), Consecutive loss years, Promoter holding (% held by insiders, India-listed only), Dividend yield, From 52w high. Common spellings (for example "Return on equity", "D/E", "PE ratio", "Graham Number", "Graham Intrinsic Value", "Cash Conversion Ratio", "PEG ratio") SHALL be accepted. Percentages are written as plain numbers: 15 means 15%. A yes/no metric takes Threshold 1 (yes) or 0 (no); any other threshold is reported as a problem.
 
 #### Scenario: Alias accepted
 - **WHEN** a row's Metric is "Return on equity"
 - **THEN** the bot reads it as ROE
 
 #### Scenario: Unknown metric
-- **WHEN** a row's Metric is "Promoter holding"
+- **WHEN** a row's Metric is "Brand Recall Score"
 - **THEN** the bot does not use the row and reports it as a problem naming the unknown metric
 
 #### Scenario: Consecutive loss years

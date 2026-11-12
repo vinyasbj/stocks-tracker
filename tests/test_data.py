@@ -98,3 +98,51 @@ def test_fundamentals_keep_description_and_country_as_text(monkeypatch):
     assert f["business_summary"].startswith("Alphabet operates through Google Services")
     assert f["country"] == "United States"
     assert f["price"] == 170.2 and f["pe"] == 24.1  # numbers are still converted
+
+
+# --- industry peers stay in the stock's own market ---
+
+class _FakeTicker:
+    INFO = {
+        "HDB": {"country": "India", "earningsGrowth": 0.20},
+        "IBN": {"country": "India", "earningsGrowth": 0.25},
+        "USB": {"country": "United States", "earningsGrowth": 0.05},
+        "PNC": {"country": "United States", "earningsGrowth": 0.07},
+        "MFG": {"country": "Japan", "earningsGrowth": None},
+    }
+
+    def __init__(self, sym):
+        self.info = self.INFO.get(sym, {"country": "United States", "earningsGrowth": 0.01})
+
+
+def test_us_peers_leave_out_indian_adrs_and_preferred_shares(monkeypatch):
+    from stockbot.data import market
+    from stockbot.store import Store
+
+    quotes = [{"symbol": s, "quoteType": "EQUITY"} for s in ["HDB", "IBN", "MFG", "USB", "USB-PH", "PNC"]]
+    monkeypatch.setattr(market.yf, "screen", lambda q, **kw: {"quotes": quotes})
+    monkeypatch.setattr(market.yf, "Ticker", _FakeTicker)
+    peers = market.peer_eps_growth("Banks—Regional", "US", Store(":memory:"))
+    assert peers == {"USB": 0.05, "PNC": 0.07}  # no HDB/IBN (Indian), no USB-PH (preferred), MFG has no figure
+
+
+def test_peer_query_uses_only_the_stocks_own_exchanges():
+    from stockbot.data import market
+
+    def parts(market_code):
+        region, industry, exchanges = market._peer_query("Banks—Regional", market_code).to_dict()["operands"]
+        return region["operands"], industry["operands"], [e["operands"][1] for e in exchanges["operands"]]
+
+    assert parts("IN") == (["region", "in"], ["industry", "Banks—Regional"], ["NSI"])
+    region, _, exchanges = parts("US")
+    assert region == ["region", "us"] and exchanges == ["NYQ", "NMS", "NGM", "NCM", "ASE"]  # no OTC (PNK)
+
+
+def test_where_peers_come_from():
+    from stockbot.data import market
+
+    assert market.peer_market(Security("TCS", "IN", "TCS"), {"country": "India"}) == "IN"
+    assert market.peer_market(Security("INFY", "US", "Infosys"), {"country": "India"}) == "IN"  # the ADR
+    assert market.peer_market(Security("MSFT", "US", "Microsoft"), {"country": "United States"}) == "US"
+    assert market.screener_industry("Banks - Regional") == "Banks—Regional"
+    assert market.screener_industry("Made-up industry") is None

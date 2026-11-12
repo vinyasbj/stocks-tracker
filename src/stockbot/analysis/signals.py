@@ -16,6 +16,33 @@ def is_financial(fundamentals: dict) -> bool:
     return "financial" in sector or any(w in industry for w in ("bank", "credit", "insurance", "capital markets"))
 
 
+ASSET_LIGHT_SECTORS = {"technology", "communication services"}
+ASSET_LIGHT_INDUSTRIES = {
+    "software",
+    "internet",
+    "information technology",
+    "it services",
+    "consulting",
+}
+
+
+def is_asset_light(fundamentals: dict) -> bool:
+    """Asset-light and IP-driven businesses where physical book value is low or unrepresentative."""
+    sector = (fundamentals.get("sector") or "").lower()
+    industry = (fundamentals.get("industry") or "").lower()
+    if any(s in sector for s in ASSET_LIGHT_SECTORS):
+        return True
+    return any(w in industry for w in ASSET_LIGHT_INDUSTRIES)
+
+
+def is_india(fundamentals: dict) -> bool:
+    return (
+        fundamentals.get("currency") == "INR"
+        or fundamentals.get("financial_currency") == "INR"
+        or fundamentals.get("country") == "India"
+    )
+
+
 def is_fund(fundamentals: dict) -> bool:
     """ETFs and mutual funds: company rules (ROE, debt, profit) don't apply to them."""
     kind = fundamentals.get("quote_type")

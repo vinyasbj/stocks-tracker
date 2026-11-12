@@ -7,7 +7,7 @@ from html import escape
 
 from ..models import Holding, Security
 from . import fmt, signals
-from .blueprint import METRICS, PILLARS, Blueprint, Diff, Locked, Parsed, Rule, fmt_value
+from .blueprint import METRICS, PILLARS, YES_NO, Blueprint, Diff, Locked, Parsed, Rule
 from .report import Research, change_line, header, prompt_item_line, quarter_line, stale_warning, statement_currency
 from .thesis import TITLES, Thesis
 from .verdict import HELD_ORDER, Check, Verdict, breakdown
@@ -404,6 +404,8 @@ SHORT = {
     "loss_years": "Loss years", "fcf_positive_years": "FCF years", "op_margin": "Op margin",
     "rev_yoy": "Revenue YoY", "ni_yoy": "Profit YoY", "rev_cagr": "Rev CAGR 3Y", "ni_cagr": "Profit CAGR 3Y",
     "dividend_yield": "Div yield", "from_52w_high": "From 52w high",
+    "pe_vs_median": "P/E vs median", "pe_contraction": "P/E contraction", "cap_profit_cagr": "Cap profit CAGR",
+    "eps_vs_peers": "EPS vs peers", "cash_conversion": "Cash conv", "promoter_holding": "Promoters",
 }
 GRID = 4  # symbols per row when a group is only a list of symbols
 
@@ -415,7 +417,8 @@ def _short(c: Check) -> str:
 def _limit(r: Rule) -> str:
     """"ROE ≥ 15.0%": a rule's limit, stated once under the table."""
     m = METRICS[r.metric]
-    return f"{SHORT.get(r.metric, m.label)} {'≥' if r.op == '>=' else '≤'} {fmt_value(r.threshold, m.unit)}"
+    sep = ": " if m.unit == YES_NO else " "
+    return f"{SHORT.get(r.metric, m.label)}{sep}{r.need()}"
 
 
 def _unsure(checks: list[Check]) -> str:

@@ -1,3 +1,4 @@
+import pytest
 import json
 from pathlib import Path
 
@@ -36,7 +37,7 @@ def test_settings_row_sets_the_pass_bar():
 def test_unusable_rows_are_reported_not_guessed():
     p = parsed()
     problems = "\n".join(p.problems)
-    assert "Promoter holding at least 50%: unknown metric 'Promoter holding'" in problems
+    assert "Strong brand recall: unknown metric 'Brand Recall Score'" in problems
     assert "ROE between 15 and 30: condition must be ≥ or ≤" in problems
     assert "Revenue CAGR at least 10%: threshold is missing" in problems
     assert "looks like a fraction; write 15 for 15%" in problems
@@ -64,8 +65,12 @@ def test_metric_aliases():
     assert bp.metric_key("Return on equity") == "roe"
     assert bp.metric_key("d/e") == "debt_to_equity"
     assert bp.metric_key("Profit growth YoY") == "ni_yoy"
+    assert bp.metric_key("Price/Graham") == "price_to_graham"
+    assert bp.metric_key("Graham Number") == "price_to_graham"
+    assert bp.metric_key("Price/Graham IV") == "price_to_graham_iv"
+    assert bp.metric_key("Graham Intrinsic Value") == "price_to_graham_iv"
     assert bp.metric_key("") == bp.JUDGMENT
-    assert bp.metric_key("Promoter holding") is None
+    assert bp.metric_key("Brand Recall Score") is None
 
 
 def test_rules_sort_by_pillar_then_must_pass():
@@ -172,3 +177,35 @@ def test_unknown_or_missing_pillar_is_reported():
     assert p.blueprint.rules == []
     assert "ROE at least 15: pillar must be Business, Quality, Growth, Safety, Valuation or Settings, not 'Qualty'" in p.problems
     assert any(x.startswith("Moat: pillar must be") for x in p.problems)
+
+
+@pytest.mark.parametrize(
+    "text,key",
+    [("PEG", "peg"), ("Cash Conversion Ratio", "cash_conversion"), ("Promoter holding", "promoter_holding")],
+)
+def test_notion_metric_names_for_peg_cash_and_promoter(text, key):
+    assert bp.metric_key(text) == key
+
+
+@pytest.mark.parametrize(
+    "text,key",
+    [("P/E Contraction", "pe_contraction"), ("Sector EPS Outperformance", "eps_vs_peers"),
+     ("P/E vs 5Y Median", "pe_vs_median"), ("Cap-Adjusted Profit CAGR", "cap_profit_cagr")],
+)
+def test_notion_metric_names_for_valuation_history_and_peers(text, key):
+    assert bp.metric_key(text) == key
+
+
+def _row(rule, metric, cond, threshold):
+    text = lambda v: {"type": "rich_text", "rich_text": [{"plain_text": v}]}
+    return {"properties": {
+        "Rule": {"type": "title", "title": [{"plain_text": rule}]}, "Pillar": text("Valuation"),
+        "Metric": text(metric), "Condition": text(cond), "Threshold": {"type": "number", "number": threshold},
+    }}
+
+
+def test_yes_no_metrics_take_only_1_or_0():
+    ok = bp.parse_rules([_row("P/E contraction", "P/E Contraction", "≥", 1)])
+    assert not ok.problems and ok.blueprint.rules[0].condition() == "P/E contraction: yes"
+    bad = bp.parse_rules([_row("P/E contraction", "P/E Contraction", "≥", 2)])
+    assert bad.problems == ["P/E contraction: P/E contraction is yes/no, so the threshold must be 1 (yes) or 0 (no)"]

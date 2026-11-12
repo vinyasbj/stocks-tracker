@@ -318,7 +318,7 @@
      "type": "title",
      "title": [
       {
-       "plain_text": "Promoter holding at least 50%"
+       "plain_text": "Strong brand recall"
       }
      ]
     },
@@ -331,7 +331,7 @@
     "Metric": {
      "type": "select",
      "select": {
-      "name": "Promoter holding"
+      "name": "Brand Recall Score"
      }
     },
     "Condition": {

@@ -2,12 +2,21 @@
 
 import math
 
+import pandas as pd
 import yfinance as yf
+from yfinance import EquityQuery as Q
+from yfinance.const import EQUITY_SCREENER_EQ_MAP
 
 from ..models import Security
 from ..store import Store
 
 FUNDAMENTALS_TTL = 6 * 3600
+PEERS_TTL = 24 * 3600
+PEERS = 10  # the industry's largest companies by market cap, in the stock's own market
+PEER_SCAN = 25  # screener rows to look through for them (some are preferred shares, ADRs, or have no figure)
+NSE_EXCHANGES = ["NSI"]  # NSE only, so a company listed on both NSE and BSE counts once
+US_EXCHANGES = ["NYQ", "NMS", "NGM", "NCM", "ASE"]  # NYSE, Nasdaq tiers, NYSE American; no OTC
+SCREENER_INDUSTRIES = {i for names in EQUITY_SCREENER_EQ_MAP["industry"].values() for i in names}
 
 INFO_FIELDS = {
     "longName": "name",
@@ -23,7 +32,11 @@ INFO_FIELDS = {
     "marketCap": "market_cap",
     "trailingPE": "pe",
     "forwardPE": "forward_pe",
+    "trailingEps": "eps",
+    "bookValue": "bvps",
     "priceToBook": "pb",
+    "trailingPegRatio": "peg",
+    "heldPercentInsiders": "insiders_held",  # fraction; for Indian companies this is the promoter holding
     "returnOnEquity": "roe",
     "debtToEquity": "debt_to_equity_pct",  # Yahoo reports this as a percentage
     "currentRatio": "current_ratio",
@@ -96,7 +109,7 @@ def fetch_fundamentals(sec: Security, store: Store) -> dict:
     )
     annual = _rows(
         t.income_stmt,
-        {"Total Revenue": "revenue", "Net Income": "net_income", "Operating Income": "operating_income"},
+        {"Total Revenue": "revenue", "Net Income": "net_income", "Operating Income": "operating_income", "Diluted EPS": "eps"},
         limit=5,
     )
     balance = {r["period"]: r for r in _rows(t.balance_sheet, {"Total Debt": "total_debt", "Stockholders Equity": "equity"}, 5)}
@@ -105,11 +118,88 @@ def fetch_fundamentals(sec: Security, store: Store) -> dict:
         row.update({k: v for k, v in balance.get(row["period"], {}).items() if k != "period"})
         row.update({k: v for k, v in cash.get(row["period"], {}).items() if k != "period"})
     data["annual"] = annual
+    _add_year_end_prices(t, annual)
 
     if not data["quarterly"] and not annual and data["price"] is None:
         raise LookupError(f"Yahoo Finance has no data for {sec.yf_symbol}")
     store.cache_set(key, data, FUNDAMENTALS_TTL)
     return data
+
+
+def _close_on(closes, day: str):
+    """The last close on or before `day` (YYYY-MM-DD), within a week; None when history doesn't reach it."""
+    end = pd.Timestamp(day)
+    if closes.index.tz is not None:
+        end = end.tz_localize(closes.index.tz)
+    before = closes[closes.index <= end]
+    if before.empty or (end - before.index[-1]).days > 7:
+        return None
+    return _num(before.iloc[-1])
+
+
+def _add_year_end_prices(t, annual: list[dict]) -> None:
+    """The share price at each fiscal year end, so past P/Es can be rebuilt from that year's EPS."""
+    if not annual:
+        return
+    try:
+        closes = t.history(period="5y", auto_adjust=False)["Close"].dropna()
+    except Exception:
+        return
+    if closes.empty:
+        return
+    for row in annual:
+        row["price_end"] = _close_on(closes, row["period"])
+
+
+def peer_market(sec: Security, fundamentals: dict) -> str:
+    """Where a company's peers come from: "IN" for an Indian company (even its US ADR, like INFY), else "US"."""
+    return "IN" if sec.market == "IN" or fundamentals.get("country") == "India" else "US"
+
+
+def _peer_query(industry: str, market: str) -> Q:
+    exchanges = NSE_EXCHANGES if market == "IN" else US_EXCHANGES
+    return Q("and", [
+        Q("eq", ["region", market.lower()]),
+        Q("eq", ["industry", industry]),
+        Q("is-in", ["exchange", *exchanges]),
+    ])
+
+
+def screener_industry(industry: str | None) -> str | None:
+    """Yahoo's screener spells "Banks - Regional" as "Banks—Regional"; None for an industry it doesn't list."""
+    name = (industry or "").replace(" - ", "—")
+    return name if name in SCREENER_INDUSTRIES else None
+
+
+def peer_eps_growth(industry: str, market: str, store: Store) -> dict[str, float]:
+    """{symbol: EPS growth YoY as a fraction} for the largest companies in the industry in one market.
+
+    "IN": NSE listings only. "US": NYSE and Nasdaq listings, leaving out over-the-counter quotes, preferred
+    shares and Indian companies listed there as ADRs (HDB, IBN, INFY, WIT), so the two markets never mix.
+    """
+    key = f"peers:{market}:{industry}"
+    cached = store.cache_get(key)
+    if cached is not None:
+        return cached
+    quotes = yf.screen(_peer_query(industry, market), sortField="intradaymarketcap", sortAsc=False, size=PEER_SCAN)
+    out: dict[str, float] = {}
+    for q in quotes.get("quotes", []):
+        sym = q.get("symbol") or ""
+        if len(out) > PEERS:  # one spare, in case the stock itself is among them
+            break
+        if q.get("quoteType") != "EQUITY" or "-" in sym:  # "USB-PH" is a preferred share
+            continue
+        try:
+            info = yf.Ticker(sym).info or {}
+        except Exception:
+            continue
+        if market == "US" and info.get("country") == "India":
+            continue
+        g = _num(info.get("earningsGrowth"))
+        if g is not None:
+            out[sym] = g
+    store.cache_set(key, out, PEERS_TTL)
+    return out
 
 
 def fetch_quote(sec: Security) -> dict:
