@@ -34,8 +34,8 @@ cp .env.example .env
 
 1. In Telegram, message **@BotFather**, send `/newbot`, and put the token in `.env` as `TELEGRAM_BOT_TOKEN`.
 2. Set `SEC_USER_AGENT` to `stock-bot <your email>`. SEC requires a contact.
-3. Connect Notion (read-only):
-   - Go to notion.so/profile/integrations, create a **New integration** (internal; *Read content* is enough), and put its token in `NOTION_TOKEN`.
+3. Connect Notion:
+   - Go to notion.so/profile/integrations, create a **New integration** (internal; *Read content* and *Update content*: the bot moves portfolio rows with Qty 0 to the trash), and put its token in `NOTION_TOKEN`.
    - In both the portfolio and the wishlist database, open **⋯ → Connections** and add the integration.
    - Paste the two database links into `NOTION_PORTFOLIO_DB` and `NOTION_WISHLIST_DB`.
    - The bot finds the usual column names: *Ticker/Symbol*, *Name/Company* (or the title column), *Exchange/Market* (NSE, BSE, NYSE, NASDAQ…), *Qty/Quantity/Shares*, and *Avg price/Buy price/Avg cost*. If yours differ, set `NOTION_COL_*` in `.env`.

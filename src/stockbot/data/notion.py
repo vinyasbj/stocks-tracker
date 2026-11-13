@@ -1,4 +1,4 @@
-"""Read the portfolio, wishlist and blueprint databases, and stock pages, from Notion (read-only)."""
+"""Read the portfolio, wishlist and blueprint databases, and stock pages, from Notion; trash sold portfolio rows and add missing logos."""
 
 import re
 import time
@@ -35,6 +35,7 @@ class NotionRow:
     url: str
     page_id: str = ""
     conviction: str | None = None  # "HIGH" | "MEDIUM" | "LOW"
+    has_icon: bool = False
 
     @property
     def label(self) -> str:
@@ -159,6 +160,7 @@ def parse_rows(
                 url=page.get("url", ""),
                 page_id=page.get("id", ""),
                 conviction=conviction_level(get("conviction")),
+                has_icon=bool(page.get("icon")),
             )
         )
     return rows
@@ -206,11 +208,19 @@ def query_pages(token: str, database: str) -> list[dict]:
         return pages
 
 
+def update_page(token: str, page_id: str, body: dict) -> None:
+    """Change a page: {"in_trash": True} moves it to the trash (restorable for 30 days), {"icon": ...} sets its icon."""
+    with httpx.Client(headers=_headers(token), timeout=30) as c:
+        _raise(_send(c, "PATCH", f"{API}/pages/{page_id}", json=body), page_id, "page")
+
+
 def _raise(resp: httpx.Response, database: str, kind: str = "database") -> None:
     if resp.status_code == 404:
         raise PermissionError(
             f"Notion can't find {kind} {database}. Open it in Notion, ⋯ → Connections, and add your integration."
         )
+    if resp.status_code == 403:
+        raise PermissionError(f"The Notion integration can't change {kind} {database}: give it Update content.")
     if resp.status_code == 401:
         raise PermissionError("Notion rejected NOTION_TOKEN. Copy it again from notion.so/profile/integrations.")
     resp.raise_for_status()

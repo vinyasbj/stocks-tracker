@@ -208,6 +208,11 @@ def test_peg_passes_and_fails_on_its_limit():
     assert one(PEG, {"peg": None}, MFG).status == "unknown"
 
 
+def test_graham_across_currencies_is_unknown_with_the_reason():
+    c = one(GRAHAM, {"price_to_graham": None, "price_to_graham_why": "priced in USD but reports in INR"}, BANK)
+    assert (c.status, c.note) == ("unknown", "priced in USD but reports in INR")
+
+
 def test_non_positive_peg_never_passes_a_peg_limit():
     assert one(PEG, {"peg": -0.4}, MFG).status == "fail"
     assert one(PEG, {"peg": None, "net_margin": -3.0}, MFG).status == "fail"

@@ -126,6 +126,22 @@ def test_us_peers_leave_out_indian_adrs_and_preferred_shares(monkeypatch):
     assert peers == {"USB": 0.05, "PNC": 0.07}  # no HDB/IBN (Indian), no USB-PH (preferred), MFG has no figure
 
 
+def test_peers_are_not_cached_when_a_lookup_failed(monkeypatch):
+    from stockbot.data import market
+    from stockbot.store import Store
+
+    class Throttled:
+        def __init__(self, sym):
+            raise RuntimeError("Too Many Requests")
+
+    monkeypatch.setattr(market.yf, "screen", lambda q, **kw: {"quotes": [{"symbol": "USB", "quoteType": "EQUITY"}]})
+    monkeypatch.setattr(market.yf, "Ticker", Throttled)
+    store = Store(":memory:")
+    assert market.peer_eps_growth("Banks—Regional", "US", store) == {}
+    monkeypatch.setattr(market.yf, "Ticker", _FakeTicker)
+    assert market.peer_eps_growth("Banks—Regional", "US", store) == {"USB": 0.05}  # retried, not the empty list
+
+
 def test_peer_query_uses_only_the_stocks_own_exchanges():
     from stockbot.data import market
 

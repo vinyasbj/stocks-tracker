@@ -201,9 +201,9 @@ def compute(f: dict, today: date | None = None) -> dict:
         net_margin = None  # Yahoo reports 0 for a company with (almost) no revenue; there is no margin to speak of
     m["net_margin"] = net_margin * 100 if net_margin is not None else m.get("fy_net_margin")
     m["pe"] = f.get("pe")
-    # PEG: Yahoo's figure, else P/E over 3-year profit CAGR (only when both are positive)
+    # PEG: Yahoo's figure, else P/E over 3-year profit CAGR; shrinking profit gives a negative PEG, which fails
     m["peg"] = f.get("peg")
-    if m["peg"] is None and (m["pe"] or 0) > 0 and (m.get("ni_cagr") or 0) > 0:
+    if m["peg"] is None and (m["pe"] or 0) > 0 and m.get("ni_cagr"):
         m["peg"] = m["pe"] / m["ni_cagr"]
     if f.get("insiders_held") is not None:
         m["promoter_holding"] = f["insiders_held"] * 100
@@ -230,7 +230,10 @@ def compute(f: dict, today: date | None = None) -> dict:
 
     # Benjamin Graham Number: SQRT(22.5 * EPS * BVPS)
     # Undervalued when Price <= Graham Number, i.e., price_to_graham <= 1.0 (equiv. PE * PB <= 22.5)
-    if eps is not None and bvps is not None and eps > 0 and bvps > 0:
+    # Yahoo's book value is unreliable when price and statements differ in currency (HDB: P/B 10.4, really ~2.4).
+    if f.get("financial_currency") and f.get("currency") and f["financial_currency"] != f["currency"]:
+        m["price_to_graham_why"] = f"priced in {f['currency']} but reports in {f['financial_currency']}"
+    elif eps is not None and bvps is not None and eps > 0 and bvps > 0:
         graham_num = math.sqrt(22.5 * eps * bvps)
         m["graham_number"] = graham_num
         if price:

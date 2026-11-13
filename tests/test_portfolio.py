@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from stockbot.alerts.digest import Position, portfolio_line, totals, totals_lines, wishlist_line
-from stockbot.data import notion
+from stockbot.data import market, notion
 from stockbot.data.tickers import Resolver
 from stockbot.models import Holding, Security
 from stockbot.store import Store
@@ -170,6 +170,48 @@ def test_wishlist_line():
     assert wishlist_line(p) == "⭐ <b>TCS</b> ₹2,400.00 (-4.0%) · -20.0% from 52w high"
 
 
+def test_sold_portfolio_rows_are_dropped_for_deletion():
+    resolver = Resolver(UNIVERSE)
+    sold = notion.NotionRow("portfolio", "AAPL", None, "US", 0, 100, "u1", "page-a")
+    no_qty = notion.NotionRow("portfolio", "TCS", None, "IN", None, None, "u2", "page-b")
+    wish = notion.NotionRow("wishlist", "INFY", None, "IN", 0, None, "u3", "page-c")
+    rep = build_holdings(resolver, [sold, no_qty, wish])
+    assert rep.sold == [sold]
+    assert {h.sec.symbol for h in rep.holdings} == {"TCS", "INFY"}
+
+
+def test_portfolio_pages_without_icon_need_a_logo():
+    resolver = Resolver(UNIVERSE)
+    bare = notion.NotionRow("portfolio", "AAPL", None, "US", 1, 100, "u1", "page-a")
+    iconed = notion.NotionRow("portfolio", "TCS", None, "IN", 1, 100, "u2", "page-b", has_icon=True)
+    wish = notion.NotionRow("wishlist", "INFY", None, "IN", None, None, "u3", "page-c")
+    rep = build_holdings(resolver, [bare, iconed, wish])
+    assert [(p, sec.symbol) for p, sec in rep.need_logo] == [("page-a", "AAPL")]
+
+
+def test_logo_url_from_website_or_fund_family():
+    from stockbot.data.market import logo_url
+
+    assert logo_url({"website": "https://www.shopify.com"}) == "https://www.google.com/s2/favicons?domain=shopify.com&sz=128"
+    assert logo_url({"website": None, "fund_family": "Global X Funds"}).endswith("domain=globalxetfs.com&sz=128")
+    assert logo_url({"fund_family": "Unknown AMC"}) is None
+
+
+def test_update_page_patches_the_page(monkeypatch):
+    import httpx
+
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.method, request.url.path, json.loads(request.content)))
+        return httpx.Response(200, json={})
+
+    real = httpx.Client
+    monkeypatch.setattr(notion.httpx, "Client", lambda **kw: real(transport=httpx.MockTransport(handler), **kw))
+    notion.update_page("secret", "page-a", {"in_trash": True})
+    assert seen == [("PATCH", "/v1/pages/page-a", {"in_trash": True})]
+
+
 def test_query_pages_follows_data_sources_and_cursors(monkeypatch):
     import httpx
 
@@ -333,13 +375,19 @@ def test_sync_with_only_a_portfolio(monkeypatch, settings):
         queried.append(database)
         return json.loads((FIX / "notion_portfolio.json").read_text())["results"]
 
+    writes = []
     monkeypatch.setattr(notion, "query_pages", fake_query)
+    monkeypatch.setattr(notion, "update_page", lambda token, page, body: writes.append(page))
+    monkeypatch.setattr(market, "fetch_fundamentals", lambda sec, store: {"website": "https://www.example.com"})
     eng = Engine(settings, Store(":memory:"))
     eng._resolver = Resolver(UNIVERSE)
     eng._lookup = lambda symbol, mkt: None
-    rep = asyncio.run(eng.sync())
+    rep = asyncio.run(eng.sync(write_notion=False))  # what /report does
     assert queried == [settings.notion_portfolio_db]
     assert {h.sec.symbol for h in rep.holdings} == {"RELIANCE", "AAPL"}
+    assert writes == []
+    rep = asyncio.run(eng.sync())
+    assert writes == [page for page, _ in rep.need_logo] and writes  # the fixture pages have no icon
 
 
 def test_settings_read_the_blueprint_database(monkeypatch):

@@ -71,6 +71,8 @@ async def main(argv: list[str]) -> None:
             print(f"{h.icon} {h.list_type:9} {h.sec.label}{extra}")
         for row, why in rep.unmatched:
             print(f"!! {row.list_type:9} {row.label}: {why}")
+        for row in rep.sold:
+            print(f"-- sold      {row.label}: moved to Notion trash")
         print(f"added {[x.symbol for x in rep.added]} removed {[x.symbol for x in rep.removed]}")
     elif cmd == "why":
         sec = await one(eng, " ".join(args))

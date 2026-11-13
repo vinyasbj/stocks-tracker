@@ -20,6 +20,8 @@ class SyncReport:
     added: list[Security] = field(default_factory=list)
     removed: list[Security] = field(default_factory=list)
     unmatched: list[tuple[notion.NotionRow, str]] = field(default_factory=list)  # (row, why)
+    sold: list[notion.NotionRow] = field(default_factory=list)  # portfolio rows with Qty 0, to delete from Notion
+    need_logo: list[tuple[str, Security]] = field(default_factory=list)  # (portfolio page without an icon, its stock)
 
 
 def _with_market(query: str, market: str | None) -> str:
@@ -73,12 +75,17 @@ def match(resolver: Resolver, row: notion.NotionRow, lookup: Lookup | None = Non
 def build_holdings(resolver: Resolver, rows: list[notion.NotionRow], lookup: Lookup | None = None) -> SyncReport:
     report = SyncReport()
     for row in rows:
+        if row.list_type == "portfolio" and row.qty == 0:
+            report.sold.append(row)
+            continue
         sec, why = match(resolver, row, lookup)
         if sec is None:
             report.unmatched.append((row, why))
         else:
             if row.list_type == "portfolio":
                 pages = (row.page_id,) if row.page_id else ()
+                if row.page_id and not row.has_icon:
+                    report.need_logo.append((row.page_id, sec))
                 report.holdings.append(Holding(sec, "portfolio", row.qty, row.avg_price, pages, row.conviction))
             else:
                 # Theses are read from portfolio rows only, so wishlist rows carry no page.

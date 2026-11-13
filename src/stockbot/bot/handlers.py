@@ -225,6 +225,8 @@ async def sync_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         lines.append("Added: " + ", ".join(escape(x.symbol) for x in rep.added))
     if rep.removed:
         lines.append("Removed: " + ", ".join(escape(x.symbol) for x in rep.removed))
+    if rep.sold:
+        lines.append("Sold (Qty 0), moved to Notion trash: " + ", ".join(escape(r.label) for r in rep.sold))
     if rep.unmatched:
         lines.append("\n⚠️ <b>Rows I can't track</b>")
         lines += [f"• {escape(row.label)} ({row.list_type}): {escape(why)}" for row, why in rep.unmatched]

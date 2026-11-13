@@ -1,8 +1,10 @@
 """Prices, ratios and financial statements from Yahoo Finance (via yfinance)."""
 
 import math
+from urllib.parse import urlparse
 
 import pandas as pd
+
 import yfinance as yf
 from yfinance import EquityQuery as Q
 from yfinance.const import EQUITY_SCREENER_EQ_MAP
@@ -20,6 +22,7 @@ SCREENER_INDUSTRIES = {i for names in EQUITY_SCREENER_EQ_MAP["industry"].values(
 
 INFO_FIELDS = {
     "longName": "name",
+    "website": "website",
     "quoteType": "quote_type",  # EQUITY, ETF, MUTUALFUND
     "sector": "sector",
     "industry": "industry",
@@ -63,7 +66,7 @@ INFO_FIELDS = {
 }
 
 
-TEXT_FIELDS = {"name", "quote_type", "category", "fund_family", "sector", "industry", "currency", "financial_currency", "business_summary", "country"}
+TEXT_FIELDS = {"name", "website", "quote_type", "category", "fund_family", "sector", "industry", "currency", "financial_currency", "business_summary", "country"}
 
 
 def _num(v):
@@ -183,6 +186,7 @@ def peer_eps_growth(industry: str, market: str, store: Store) -> dict[str, float
         return cached
     quotes = yf.screen(_peer_query(industry, market), sortField="intradaymarketcap", sortAsc=False, size=PEER_SCAN)
     out: dict[str, float] = {}
+    failed = False
     for q in quotes.get("quotes", []):
         sym = q.get("symbol") or ""
         if len(out) > PEERS:  # one spare, in case the stock itself is among them
@@ -192,13 +196,15 @@ def peer_eps_growth(industry: str, market: str, store: Store) -> dict[str, float
         try:
             info = yf.Ticker(sym).info or {}
         except Exception:
+            failed = True  # e.g. rate-limited: the list is incomplete, so don't keep it for a day
             continue
         if market == "US" and info.get("country") == "India":
             continue
         g = _num(info.get("earningsGrowth"))
         if g is not None:
             out[sym] = g
-    store.cache_set(key, out, PEERS_TTL)
+    if not failed:
+        store.cache_set(key, out, PEERS_TTL)
     return out
 
 
@@ -221,6 +227,21 @@ LISTED_TYPES = ("EQUITY", "ETF", "MUTUALFUND")
 
 
 FUND_TYPES = ("ETF", "MUTUALFUND")
+# shortcut: only common fund families, add one when a new ETF gets no logo.
+FUND_SITES = {
+    "vanguard": "vanguard.com", "proshares": "proshares.com", "invesco": "invesco.com", "ishares": "ishares.com",
+    "global x": "globalxetfs.com", "roundhill": "roundhillinvestments.com", "state street": "ssga.com",
+    "schwab": "schwab.com",
+}
+
+
+def logo_url(fundamentals: dict) -> str | None:
+    """Google's favicon for the company's (or an ETF's fund family's) website, as the Notion page icons use."""
+    domain = (urlparse(fundamentals.get("website") or "").hostname or "").removeprefix("www.")
+    if not domain:
+        family = (fundamentals.get("fund_family") or "").lower()
+        domain = next((d for name, d in FUND_SITES.items() if name in family), "")
+    return f"https://www.google.com/s2/favicons?domain={domain}&sz=128" if domain else None
 
 
 def lookup_symbol(symbol: str, market: str | None, types: tuple[str, ...] = LISTED_TYPES) -> Security | None:

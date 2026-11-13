@@ -24,6 +24,12 @@ For each rule in the locked blueprint the bot SHALL produce one of: pass, fail, 
 #### Scenario: Graham number on asset-light companies
 - **WHEN** the stock is a tech, software or asset-light service company and the rule uses Price/Graham
 - **THEN** the rule is not applicable ("not applicable for asset-light tech & software") and does not count towards any total
+- **WHEN** the stock is a telecom carrier
+- **THEN** the Price/Graham rule applies: carriers own their networks, so book value is meaningful
+
+#### Scenario: Graham number across currencies
+- **WHEN** a rule uses Price/Graham and the stock is priced in one currency but reports in another (for example HDB)
+- **THEN** the rule is unknown with that reason, since Yahoo's book value for such stocks is unreliable
 
 #### Scenario: Promoter holding outside India
 - **WHEN** the stock is not India-listed and the rule uses Promoter holding

@@ -16,7 +16,7 @@ def is_financial(fundamentals: dict) -> bool:
     return "financial" in sector or any(w in industry for w in ("bank", "credit", "insurance", "capital markets"))
 
 
-ASSET_LIGHT_SECTORS = {"technology", "communication services"}
+ASSET_LIGHT_SECTORS = {"technology"}  # not communication services: telecom carriers own networks and towers
 ASSET_LIGHT_INDUSTRIES = {
     "software",
     "internet",

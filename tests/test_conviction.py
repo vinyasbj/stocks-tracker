@@ -245,7 +245,7 @@ def report_of(eng, monkeypatch, holdings, data):
     run(eng.lock_blueprint())
     eng.store.replace_holdings(holdings)
 
-    async def no_sync():
+    async def no_sync(**_):
         return None
 
     eng.sync = no_sync
@@ -280,7 +280,7 @@ def test_report_syncs_notion_first(eng):
     run(eng.lock_blueprint())
     eng.store.replace_holdings([Holding(GOOGL, "portfolio", 1, 1), Holding(JUNK, "portfolio", 1, 1)])
 
-    async def sync():  # JUNK was removed from the Notion portfolio since the last sync
+    async def sync(**_):  # JUNK was removed from the Notion portfolio since the last sync
         eng.store.replace_holdings([Holding(GOOGL, "portfolio", 1, 1)])
 
     eng.sync = sync
@@ -292,7 +292,7 @@ def test_report_says_when_notion_could_not_be_reread(eng):
     run(eng.lock_blueprint())
     eng.store.replace_holdings([Holding(GOOGL, "portfolio", 1, 1)])
 
-    async def sync():
+    async def sync(**_):
         raise ConnectionError("Notion is down")
 
     eng.sync = sync

@@ -186,7 +186,26 @@ def test_is_asset_light():
     assert signals.is_asset_light({"sector": "Industrials", "industry": "Freight"}) is False
     assert signals.is_asset_light({"sector": "Utilities", "industry": "Electric"}) is False
     assert signals.is_asset_light({"sector": "Basic Materials", "industry": "Steel"}) is False
+    assert signals.is_asset_light({"sector": "Communication Services", "industry": "Telecom Services"}) is False
     assert signals.is_asset_light({}) is False
+
+
+def test_graham_number_skips_a_stock_priced_and_reporting_in_different_currencies():
+    # HDB: priced in USD, reports in INR; Yahoo's book value for it is off by ~4x
+    hdb = {"price": 26.0, "pe": 16.8, "pb": 10.4, "eps": 1.55, "bvps": 2.51, "currency": "USD", "financial_currency": "INR"}
+    m = metrics.compute(hdb)
+    assert "price_to_graham" not in m and m["price_to_graham_why"] == "priced in USD but reports in INR"
+
+
+def test_shrinking_profit_gives_a_negative_peg():
+    annual = [
+        {"period": "2026-03-31", "revenue": 100, "net_income": 72.9},
+        {"period": "2025-03-31", "revenue": 100, "net_income": 81},
+        {"period": "2024-03-31", "revenue": 100, "net_income": 90},
+        {"period": "2023-03-31", "revenue": 100, "net_income": 100},
+    ]
+    m = metrics.compute({"pe": 20.0, "annual": annual})
+    assert round(m["peg"], 2) == -2.0  # 20 / -10% profit CAGR
 
 
 def test_peg_cash_conversion_and_promoter_holding():

@@ -144,7 +144,7 @@ class Engine:
 
     # --- portfolio and wishlist (Notion) ---
 
-    async def sync(self) -> SyncReport:
+    async def sync(self, write_notion: bool = True) -> SyncReport:
         s = self.settings
         if not s.notion_token or not (s.notion_portfolio_db or s.notion_wishlist_db):
             raise RuntimeError(
@@ -155,6 +155,21 @@ class Engine:
             notion.fetch, s.notion_token, s.notion_portfolio_db, s.notion_wishlist_db, s.notion_columns, markets
         )
         rep = await asyncio.to_thread(build_holdings, await self.resolver(), rows, self._lookup)
+        if write_notion:  # trash sold rows, add missing logos
+            for row in rep.sold:
+                try:
+                    await asyncio.to_thread(notion.update_page, s.notion_token, row.page_id, {"in_trash": True})
+                    log.info("notion sync: deleted sold row %s", row.label)
+                except Exception as e:
+                    log.warning("couldn't delete sold row %s from Notion: %s", row.label, e)
+            for page, sec in rep.need_logo:
+                try:
+                    url = market.logo_url(await asyncio.to_thread(market.fetch_fundamentals, sec, self.store))
+                    if url:
+                        icon = {"icon": {"type": "external", "external": {"url": url}}}
+                        await asyncio.to_thread(notion.update_page, s.notion_token, page, icon)
+                except Exception as e:
+                    log.warning("couldn't set the Notion logo for %s: %s", sec.symbol, e)
         rep.added, rep.removed = self.store.replace_holdings(rep.holdings)
         if rep.added or rep.removed:
             log.info("notion sync: +%s -%s", [x.symbol for x in rep.added], [x.symbol for x in rep.removed])
@@ -293,7 +308,7 @@ class Engine:
         if locked is None:
             return rep
         try:
-            await self.sync()  # rows added or removed in Notion since the last sync
+            await self.sync(write_notion=False)  # rows added or removed since the last sync; the report never writes
         except Exception as e:
             log.warning("report: Notion sync failed, using the last synced list: %s", e)
             rep.sync_error = str(e) or type(e).__name__
