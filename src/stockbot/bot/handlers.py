@@ -7,6 +7,7 @@ from html import escape
 import httpx
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ChatAction, ParseMode
+from telegram.error import NetworkError
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -326,7 +327,16 @@ async def on_error(update: object, ctx: ContextTypes.DEFAULT_TYPE):
 
 def sender(ctx: ContextTypes.DEFAULT_TYPE):
     async def send(chat_id: int, html: str):
-        await ctx.bot.send_message(chat_id, html, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+        # The monitor marks items seen before sending, so a failed send loses the alert for good: retry.
+        # shortcut: a timeout can hide a delivered message, so a retry may rarely send a duplicate.
+        for attempt in range(3):
+            try:
+                await ctx.bot.send_message(chat_id, html, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+                return
+            except NetworkError:  # TimedOut is a NetworkError
+                if attempt == 2:
+                    raise
+                await asyncio.sleep(2 ** attempt)
 
     return send
 

@@ -119,3 +119,22 @@ def test_why_for_an_etf_has_no_summary_step(eng, monkeypatch):  # noqa: F811
     assert [k for k, _, _ in log] == ["reply", "edit"]  # no third edit: Telegram rejects an unchanged edit
     assert "NOT JUDGED" in log[-1][1] and "Not in your portfolio." in log[-1][1]
     assert eng.llm.calls == 0 and ctx.chat_data["last_sec"] == QQQM
+
+
+def test_send_retries_a_timed_out_telegram_call(monkeypatch):
+    from telegram.error import TimedOut
+
+    async def no_sleep(_):
+        pass
+
+    monkeypatch.setattr(handlers.asyncio, "sleep", no_sleep)
+    calls = []
+
+    class Bot:
+        async def send_message(self, chat_id, html, **kw):
+            calls.append(chat_id)
+            if len(calls) < 3:
+                raise TimedOut("Timed out")
+
+    asyncio.run(handlers.sender(SimpleNamespace(bot=Bot()))(CHAT, "hi"))
+    assert calls == [CHAT] * 3  # two timeouts, then delivered

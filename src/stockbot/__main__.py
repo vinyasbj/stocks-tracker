@@ -56,7 +56,14 @@ def main() -> None:
         except Exception as e:
             log.warning("Notion sync at startup failed: %s", e)
 
-    app = Application.builder().token(settings.telegram_bot_token).post_init(post_init).build()
+    # PTB's 5s default read/write timeout is too tight for a slow link to Telegram's servers.
+    app = (
+        Application.builder()
+        .token(settings.telegram_bot_token)
+        .connect_timeout(15).read_timeout(30).write_timeout(30).pool_timeout(15)
+        .post_init(post_init)
+        .build()
+    )
     app.bot_data["engine"] = eng
     handlers.register(app)
     app.job_queue.run_repeating(
